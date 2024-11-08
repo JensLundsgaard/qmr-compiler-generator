@@ -7,8 +7,14 @@ use std::io::{self, BufRead};
 pub struct Qubit(usize);
 
 #[derive(Hash, PartialEq, Eq, Clone, Copy, Debug, Default)]
-pub struct Location(pub usize);
+pub struct Location(usize);
 
+impl Location {
+    pub fn new(i: usize) -> Self {
+        return Location(i);
+    
+}
+}
 #[derive(Clone, Debug)]
 pub struct Gate {
     name: String,
@@ -121,6 +127,7 @@ pub fn path_graph(n: usize) -> Graph<Location, ()> {
     }
     for i in 0..n - 1 {
         g.add_edge(nodes[i], nodes[i + 1], ());
+        g.add_edge(nodes[i+1], nodes[i], ());
     }
     return g;
 }

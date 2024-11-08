@@ -2,6 +2,7 @@ use crate::backend::solve;
 use crate::utils::{Architecture, Circuit, Location, Qubit, Step, Transition};
 use petgraph::{graph::NodeIndex, Graph};
 use std::collections::HashMap;
+use std::u16::MAX;
 
 pub struct NisqArchitecture {
     graph: Graph<Location, ()>,
@@ -73,7 +74,7 @@ impl Transition for NisqTrans {
 fn nisq_transitions(arch: &NisqArchitecture) -> Vec<NisqTrans> {
     let mut transitions = Vec::new();
     transitions.push(NisqTrans {
-        edge: (Location(0), Location(0)),
+        edge: (Location::new(0), Location::new(0)),
     });
     for edge in arch.graph.edge_indices() {
         let (source, target) = arch.graph.edge_endpoints(edge).unwrap();
@@ -109,6 +110,23 @@ fn nisq_step_cost(_step: &Step) -> f64 {
     0.0
 }
 
+fn mapping_heuristic(arch: &NisqArchitecture, c: &Circuit, map: &HashMap<Qubit, Location>, ) -> f64{
+    let graph = arch.get_graph();
+    let mut cost = 0;
+    for gate in &c.gates{
+        let (cpos, tpos) = (map.get(&gate.qubits[0]), map.get(&gate.qubits[1]));
+        let (cind, tind) = (arch.index_map[cpos.unwrap()], arch.index_map[tpos.unwrap()]);
+        let sp_res = petgraph::algo::astar(graph, cind, |n| n == tind, |_| 1, |_| 1);
+        match sp_res {
+            Some((c, _)) => cost += c,
+            None => cost = MAX,
+            
+        }
+    }
+    return cost as f64;
+
+}
+
 pub fn nisq_solve(c: &Circuit, a: &NisqArchitecture) -> (Vec<Step>, Vec<String>, f64) {
-    solve(c, a, &nisq_transitions(a), nisq_step_valid, nisq_step_cost)
+   return solve(c, a, &nisq_transitions(a), nisq_step_valid, nisq_step_cost, Some(mapping_heuristic));
 }
