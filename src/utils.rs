@@ -12,8 +12,7 @@ pub struct Location(usize);
 impl Location {
     pub fn new(i: usize) -> Self {
         return Location(i);
-    
-}
+    }
 }
 #[derive(Clone, Debug)]
 pub struct Gate {
@@ -52,6 +51,17 @@ impl Circuit {
         self.gates.retain(|g| !gates.contains(g));
     }
 }
+
+pub fn circuit_from_gates(gates: Vec<Gate>) -> Circuit {
+    let mut qubits = HashSet::new();
+    for gate in &gates {
+        for qubit in &gate.qubits {
+            qubits.insert(*qubit);
+        }
+    }
+    return Circuit { gates, qubits };
+}
+
 #[derive(Clone, Debug)]
 pub struct Step {
     pub gates: Vec<Gate>,
@@ -127,7 +137,26 @@ pub fn path_graph(n: usize) -> Graph<Location, ()> {
     }
     for i in 0..n - 1 {
         g.add_edge(nodes[i], nodes[i + 1], ());
-        g.add_edge(nodes[i+1], nodes[i], ());
+        g.add_edge(nodes[i + 1], nodes[i], ());
     }
     return g;
+}
+
+pub fn drop_zeros_and_normalize<T: IntoIterator<Item = (f64, f64)> + Clone>(
+    weighted_values: T,
+) -> f64 {
+    let mut total_weight = 0.0;
+    let mut weighted_sum = 0.0;
+    for (w, v) in weighted_values.clone() {
+        if v != 0.0 {
+            total_weight += w;
+        }
+    }
+    for (w, v) in weighted_values.clone() {
+        {
+            let normalized = w / total_weight;
+            weighted_sum += normalized * v;
+        }
+    }
+    return weighted_sum;
 }

@@ -1,11 +1,11 @@
 use rand::seq::SliceRandom;
 
-use crate::utils::{Architecture, Circuit, Location, Qubit, Step, Transition};
+use crate::utils::*;
 use std::collections::HashMap;
-const ALPHA: f64 = 1.0 / 3.0;
-const BETA: f64 = 1.0 / 3.0;
-const GAMMA: f64 = 2.0 / 3.0;
-
+const ALPHA: f64 = 1.0;
+const BETA: f64 = 1.0;
+const GAMMA: f64 = 2.0;
+const DELTA: f64 = 2.0;
 fn random_map<T: Architecture>(c: &Circuit, arch: &T) -> HashMap<Qubit, Location> {
     let mut map = HashMap::new();
     let mut rng = &mut rand::thread_rng();
@@ -115,6 +115,7 @@ fn route<T: Architecture, R: Transition>(
     transitions: &Vec<R>,
     valid_step: fn(&Step, &T) -> bool,
     step_cost: fn(&Step) -> f64,
+    map_eval: impl Fn(&Circuit, &HashMap<Qubit, Location>) -> f64,
 ) -> (Vec<Step>, Vec<String>, f64) {
     let mut steps = Vec::new();
     let mut trans_taken = Vec::new();
@@ -137,6 +138,7 @@ fn route<T: Architecture, R: Transition>(
             valid_step,
             steps.last(),
             step_cost,
+            &map_eval,
         );
         match best {
             Some((s, trans, _b)) => {
@@ -160,6 +162,7 @@ fn find_best_next_step<'a, T: Architecture, R: Transition>(
     valid_step: fn(&Step, &T) -> bool,
     last_step: Option<&Step>,
     step_cost: fn(&Step) -> f64,
+    map_eval: impl Fn(&Circuit, &HashMap<Qubit, Location>) -> f64,
 ) -> Option<(Step, &'a R, f64)> {
     let mut best: Option<(Step, &R, f64)> = None;
     for trans in transitions {
@@ -168,8 +171,12 @@ fn find_best_next_step<'a, T: Architecture, R: Transition>(
         next_step.maximize_step(&executable, arch, valid_step);
         let s_cost = step_cost(&next_step);
         let t_cost = trans.cost();
-
-        let cost = ALPHA * s_cost + BETA * t_cost + GAMMA * -(next_step.gates.len() as f64);
+        let m_cost = map_eval(&circuit_from_gates(executable), &next_step.map);
+        let weighted_vals = std::iter::zip(
+            vec![ALPHA, BETA, GAMMA, DELTA],
+            vec![s_cost, t_cost, m_cost, -(next_step.gates.len() as f64)],
+        );
+        let cost = drop_zeros_and_normalize(weighted_vals);
         match best {
             Some((ref _s, _prev_trans, b)) => {
                 if cost < b {
@@ -195,13 +202,23 @@ pub fn solve<T: Architecture, R: Transition>(
     match mapping_heuristic {
         Some(heuristic) => {
             let map_h = |m: &HashMap<Qubit, Location>| heuristic(arch, c, m);
-            let map = sim_anneal_mapping_search(random_map(c, arch), arch, 1000.0, 0.0001, 0.99, map_h);
+            let route_h = |c: &Circuit, m: &HashMap<Qubit, Location>| heuristic(arch, c, m);
+            let map =
+                sim_anneal_mapping_search(random_map(c, arch), arch, 1000.0, 0.0001, 0.99, map_h);
             println!("{:?}", map);
-            return route(c, arch, map, transitions, valid_step, step_cost);
+            return route(c, arch, map, transitions, valid_step, step_cost, route_h);
         }
         None => {
             let map = random_map(c, arch);
-            return route(c, arch, map, transitions, valid_step, step_cost);
+            return route(
+                c,
+                arch,
+                map,
+                transitions,
+                valid_step,
+                step_cost,
+                |_c, _m| 0.0,
+            );
         }
     }
 }
