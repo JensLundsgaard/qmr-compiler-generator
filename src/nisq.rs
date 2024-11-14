@@ -1,8 +1,10 @@
 use crate::backend::solve;
-use crate::utils::{Architecture, Circuit, Location, Qubit, Step, Transition};
+use crate::utils::{
+    Architecture, Circuit, Gate, GateImplementation, Location, Qubit, Step, Transition,
+};
 use petgraph::{graph::NodeIndex, Graph};
 use std::collections::HashMap;
-use std::u16::MAX;
+use std::usize::MAX;
 
 pub struct NisqArchitecture {
     graph: Graph<Location, ()>,
@@ -16,17 +18,16 @@ impl NisqArchitecture {
         }
         return NisqArchitecture { graph, index_map };
     }
+    pub fn get_graph(&self) -> &Graph<Location, ()> {
+        return &self.graph;
+    }
 }
 
 impl Architecture for NisqArchitecture {
-    fn get_graph(&self) -> &Graph<Location, ()> {
-        return &self.graph;
-    }
-
-    fn get_locations(&self) -> Vec<&Location> {
+    fn get_locations(&self) -> Vec<Location> {
         let mut locations = Vec::new();
         for node in self.graph.node_indices() {
-            locations.push(&self.graph[node]);
+            locations.push(self.graph[node]);
         }
         return locations;
     }
@@ -50,12 +51,20 @@ fn swap_on_edge(
 struct NisqTrans {
     edge: (Location, Location),
 }
+#[derive(Clone, Debug)]
+pub struct NisqGateImplementation {
+    edge: (Location, Location),
+}
 
-impl Transition for NisqTrans {
-    fn apply(&self, step: &Step) -> Step {
+impl GateImplementation for NisqGateImplementation {}
+
+type NisqStep = Step<NisqGateImplementation>;
+
+impl Transition<NisqGateImplementation> for NisqTrans {
+    fn apply(&self, step: &NisqStep) -> NisqStep {
         let mut new_step = step.clone();
         new_step.map = swap_on_edge(&step.map, self.edge);
-        new_step.gates = Vec::new();
+        new_step.implementation = HashMap::new();
         return new_step;
     }
     fn repr(&self) -> String {
@@ -85,9 +94,9 @@ fn nisq_transitions(arch: &NisqArchitecture) -> Vec<NisqTrans> {
     return transitions;
 }
 
-fn nisq_step_valid(step: &Step, arch: &NisqArchitecture) -> bool {
+fn nisq_step_valid(step: &NisqStep, arch: &NisqArchitecture) -> bool {
     let graph = arch.get_graph();
-    for gate in &step.gates {
+    for gate in &step.gates() {
         let (cpos, tpos) = (step.map.get(&gate.qubits[0]), step.map.get(&gate.qubits[1]));
         match cpos {
             Some(cpos) => match tpos {
@@ -106,7 +115,31 @@ fn nisq_step_valid(step: &Step, arch: &NisqArchitecture) -> bool {
     return true;
 }
 
-fn nisq_step_cost(_step: &Step) -> f64 {
+fn nisq_implement_gate(
+    step: &NisqStep,
+    arch: &NisqArchitecture,
+    gate: &Gate,
+) -> Option<NisqGateImplementation> {
+    let graph = arch.get_graph();
+    let (cpos, tpos) = (step.map.get(&gate.qubits[0]), step.map.get(&gate.qubits[1]));
+    match cpos {
+        Some(cpos) => match tpos {
+            Some(tpos) => {
+                if graph.contains_edge(arch.index_map[cpos], arch.index_map[tpos]) {
+                    return Some(NisqGateImplementation {
+                        edge: (*cpos, *tpos),
+                    });
+                } else {
+                    return None;
+                }
+            }
+            None => return None,
+        },
+        None => return None,
+    }
+}
+
+fn nisq_step_cost(_step: &NisqStep, _arch: &NisqArchitecture) -> f64 {
     0.0
 }
 
@@ -125,12 +158,12 @@ fn mapping_heuristic(arch: &NisqArchitecture, c: &Circuit, map: &HashMap<Qubit, 
     return cost as f64;
 }
 
-pub fn nisq_solve(c: &Circuit, a: &NisqArchitecture) -> (Vec<Step>, Vec<String>, f64) {
+pub fn nisq_solve(c: &Circuit, a: &NisqArchitecture) -> (Vec<NisqStep>, Vec<String>, f64) {
     return solve(
         c,
         a,
-        &nisq_transitions(a),
-        nisq_step_valid,
+        &|_s| nisq_transitions(a),
+        nisq_implement_gate,
         nisq_step_cost,
         Some(mapping_heuristic),
     );

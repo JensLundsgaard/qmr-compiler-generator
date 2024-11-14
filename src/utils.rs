@@ -9,12 +9,17 @@ pub struct Qubit(usize);
 #[derive(Hash, PartialEq, Eq, Clone, Copy, Debug, Default)]
 pub struct Location(usize);
 
+pub type QubitMap = HashMap<Qubit, Location>;
+
 impl Location {
     pub fn new(i: usize) -> Self {
         return Location(i);
     }
+    pub fn get_index(&self) -> usize {
+        return self.0;
+    }
 }
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, Hash)]
 pub struct Gate {
     name: String,
     pub qubits: Vec<Qubit>,
@@ -62,41 +67,46 @@ pub fn circuit_from_gates(gates: Vec<Gate>) -> Circuit {
     return Circuit { gates, qubits };
 }
 
+pub trait GateImplementation {}
+
 #[derive(Clone, Debug)]
-pub struct Step {
-    pub gates: Vec<Gate>,
-    pub map: HashMap<Qubit, Location>,
+pub struct Step<T: GateImplementation> {
+    pub map: QubitMap,
+    pub implementation: HashMap<Gate, T>,
 }
 
-impl Step {
-    fn add_gate(&mut self, gate: &Gate) {
-        self.gates.push(gate.clone());
-    }
-
-    pub fn maximize_step<T: Architecture>(
+impl<G: GateImplementation> Step<G> {
+    pub fn max_step<A: Architecture>(
         &mut self,
         executable: &Vec<Gate>,
-        arch: &T,
-        valid_step: fn(&Step, &T) -> bool,
+        arch: &A,
+        implement_gate: fn(&Step<G>, &A, &Gate) -> Option<G>,
     ) {
+        assert!(self.implementation.is_empty());
         for gate in executable {
-            self.add_gate(gate);
-            if !valid_step(self, arch) {
-                self.gates.pop();
+            let implementation = implement_gate(self, arch, gate);
+            match implementation {
+                None => continue,
+                Some(implementation) => {
+                    self.implementation.insert(gate.clone(), implementation);
+                }
             }
         }
     }
+
+    pub fn gates(&self) -> Vec<Gate> {
+        return self.implementation.keys().cloned().collect();
+    }
 }
 
-pub trait Transition {
-    fn apply(&self, step: &Step) -> Step;
+pub trait Transition<T: GateImplementation> {
+    fn apply(&self, step: &Step<T>) -> Step<T>;
     fn repr(&self) -> String;
     fn cost(&self) -> f64;
 }
 
 pub trait Architecture {
-    fn get_graph(&self) -> &Graph<Location, ()>;
-    fn get_locations(&self) -> Vec<&Location>;
+    fn get_locations(&self) -> Vec<Location>;
 }
 
 pub fn extract_cnots(filename: &str) -> Circuit {
