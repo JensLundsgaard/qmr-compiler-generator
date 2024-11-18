@@ -4,8 +4,8 @@ use crate::utils::*;
 use std::collections::HashMap;
 const ALPHA: f64 = 1.0;
 const BETA: f64 = 1.0;
-const GAMMA: f64 = 2.0;
-const DELTA: f64 = 2.0;
+const GAMMA: f64 = 1.0;
+const DELTA: f64 = 1.0;
 fn random_map<T: Architecture>(c: &Circuit, arch: &T) -> QubitMap {
     let mut map = HashMap::new();
     let mut rng = &mut rand::thread_rng();
@@ -113,7 +113,7 @@ fn route<A: Architecture, R: Transition<G>, G: GateImplementation>(
     implement_gate: fn(&Step<G>, &A, &Gate) -> Option<G>,
     step_cost: fn(&Step<G>, &A) -> f64,
     map_eval: impl Fn(&Circuit, &QubitMap) -> f64,
-) -> (Vec<Step<G>>, Vec<String>, f64) {
+) -> CompilerResult<G> {
     let mut steps = Vec::new();
     let mut trans_taken = Vec::new();
     let mut step_0 = Step {
@@ -127,7 +127,6 @@ fn route<A: Architecture, R: Transition<G>, G: GateImplementation>(
     current_circ.remove_gates(&(step_0.gates()));
     steps.push(step_0);
     while current_circ.gates.len() > 0 {
-        println!("{:?}", current_circ.gates.len());
         let best = find_best_next_step(
             &current_circ,
             arch,
@@ -150,7 +149,7 @@ fn route<A: Architecture, R: Transition<G>, G: GateImplementation>(
             }
         }
     }
-    return (steps, trans_taken, cost);
+    return CompilerResult{steps, transitions: trans_taken, cost};
 }
 
 fn find_best_next_step<A: Architecture, R: Transition<G>, G: GateImplementation>(
@@ -196,14 +195,13 @@ pub fn solve<A: Architecture, R: Transition<G>, G: GateImplementation>(
     implement_gate: fn(&Step<G>, &A, &Gate) -> Option<G>,
     step_cost: fn(&Step<G>, &A) -> f64,
     mapping_heuristic: Option<fn(&A, &Circuit, &QubitMap) -> f64>,
-) -> (Vec<Step<G>>, Vec<String>, f64) {
+) -> CompilerResult<G> {
     match mapping_heuristic {
         Some(heuristic) => {
             let map_h = |m: &QubitMap| heuristic(arch, c, m);
             let route_h = |c: &Circuit, m: &QubitMap| heuristic(arch, c, m);
             let map =
                 sim_anneal_mapping_search(random_map(c, arch), arch, 1000.0, 0.0001, 0.99, map_h);
-            println!("{:?}", map);
             return route(
                 c,
                 arch,

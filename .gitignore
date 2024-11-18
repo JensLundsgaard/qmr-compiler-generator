@@ -1,1 +1,9 @@
 /target
+*.aux
+*.flg
+*.out
+*fdb_latexmk
+*.fls
+*.synctex.gz
+*.pdf
+*.log

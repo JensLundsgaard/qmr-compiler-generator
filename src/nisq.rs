@@ -1,8 +1,9 @@
 use crate::backend::solve;
 use crate::utils::{
-    Architecture, Circuit, Gate, GateImplementation, Location, Qubit, Step, Transition,
+    Architecture, Circuit, CompilerResult, Gate, GateImplementation, Location, Qubit, Step, Transition
 };
 use petgraph::{graph::NodeIndex, Graph};
+use serde::Serialize;
 use std::collections::HashMap;
 use std::usize::MAX;
 
@@ -51,7 +52,7 @@ fn swap_on_edge(
 struct NisqTrans {
     edge: (Location, Location),
 }
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize)]
 pub struct NisqGateImplementation {
     edge: (Location, Location),
 }
@@ -152,13 +153,13 @@ fn mapping_heuristic(arch: &NisqArchitecture, c: &Circuit, map: &HashMap<Qubit, 
         let sp_res = petgraph::algo::astar(graph, cind, |n| n == tind, |_| 1, |_| 1);
         match sp_res {
             Some((c, _)) => cost += c,
-            None => cost = MAX,
+            None => panic!("Disconnected graph. No path found from {:?} to {:?}", cpos, tpos)
         }
     }
     return cost as f64;
 }
 
-pub fn nisq_solve(c: &Circuit, a: &NisqArchitecture) -> (Vec<NisqStep>, Vec<String>, f64) {
+pub fn nisq_solve(c: &Circuit, a: &NisqArchitecture) -> CompilerResult<NisqGateImplementation> {
     return solve(
         c,
         a,

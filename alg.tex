@@ -1,0 +1,100 @@
+\documentclass[anonymous, nonacm, acmsmall,screen,review]{acmart}
+\usepackage{algorithm}
+
+\usepackage[noend]{algpseudocode}
+\newcommand{\stepcount}{t}
+\newcommand{\nextl}{R_\textsc{next}}
+\newcommand{\ours}{\textsc{dascot}\xspace}
+\newcommand{\autobraid}{Autobraid\xspace}
+\newcommand{\idplace}{\textrm{relaxed-identity}\xspace}
+\newcommand{\randplace}{\textsc{rand-map}\xspace} 
+\newcommand{\randplacegr}[1]{{\textsc{rand(#1)-greedy}\xspace}}
+\newcommand{\maxplace}{\textsc{maxsat-map}\xspace}
+\newcommand{\maxplacegr}{\textsc{maxsat-greedy}\xspace}
+\newcommand{\structplace}{\textsc{struct-map}\xspace}
+\newcommand{\layerplace}{\ours-\textsc{map}\xspace}
+\newcommand{\structplacegr}{\textsc{struct-greedy}\xspace}
+\newcommand{\opt}{\textsc{optimal}\xspace}
+\newcommand{\shortestfirst}{\textsc{shortest-first}\xspace}
+\newcommand{\greedyroute}{\textsc{greedy-route}\xspace}
+\newcommand{\lookaheadroute}{\textsc{\ours-route}\xspace}
+\newcommand{\interactgraph}{I}
+\newcommand{\gatesrouted}{\textsc{gates-routed}\xspace}
+\newcommand{\criticalgatesrouted}{\textsc{crit-gates-routed}\xspace}
+\newcommand{\reward}{R}
+\newcommand{\oursrandmap}{\textsc{\ours-randmap}\xspace}
+\newcommand{\oursrandroute}{\textsc{\ours-randroute}\xspace}
+\newcommand{\randroute}{\textsc{rand}\xspace}
+\newcommand{\ourslimited}{\textsc{limited}\xspace}
+\newcommand{\scc}{\textsc{scmr}\xspace}
+\newcommand{\scmr}{\textsc{scmr}\xspace}
+\newcommand{\scr}{\textsc{scr}\xspace}
+\newcommand{\rspace}{R_\textsc{space}}
+\newcommand{\rtime}{R_\textsc{time}}
+\newcommand{\arch}{A}
+\newcommand{\circuit}{C}
+\newcommand{\map}{M}
+\newcommand{\mapset}{M}
+\newcommand{\graph}{G}
+\newcommand{\vertices}{V}
+\newcommand{\edges}{E}
+\newcommand{\msf}{MS}
+\newcommand{\qset}{Q}
+\newcommand{\cost}{f}
+\DeclareMathOperator*{\argmax}{argmax}
+\DeclareMathOperator*{\argmin}{argmin}
+\DeclareMathOperator*{\conflicts}{\textsc{conflicts}}
+\DeclareMathOperator*{\criticality}{\textsc{criticality}}
+\DeclareMathOperator*{\routelayer}{\textsc{route-seq}}
+\DeclareMathOperator*{\maximalstep}{\textsf{maximal-step}}
+\DeclareMathOperator*{\addgate}{\textsf{implement-gate}}
+
+
+\title{A Language for Quantum Circuit Mapping \& Routing}
+\begin{document}
+\maketitle
+\section{The Meta-Solver}
+In this section we describe our algorithm for solving a generic mapping and routing problem. By
+projecting this  function with concrete arguments for \textsf{transitions}, $\addgate$, and
+\textsf{step-cost}, we obtain a solver for a particular mapping and routing problem. 
+
+\begin{algorithm}
+    \begin{algorithmic}[1]
+        \Procedure{solve}{arch, circ, transitions, fn $\addgate$}
+        \State Intialize the step sequence $S$ 
+        \State Choose a qubit map $M$
+        \State $s_0 \gets \maximalstep(\text{arch}, M, \text{circ}.\text{front-layer()}, \addgate)$
+        \While{$\circuit \neq \emptyset$} \Comment \emph{note we remove gates from $\circuit$}
+        \For{t in transitions}
+        \State $M \gets S.last().map()$
+        \State $M' \gets T(M)$ 
+        \State s $\gets \maximalstep(\mathrm{arch}, M', \mathrm{gates}, \addgate)$
+        \If{$cost(s) < cost(s^*)$}
+            \State $s^* \gets s$
+        \EndIf
+\EndFor
+        \State Append $s^*$ to $S$
+        \State Remove gates in $s^*$ from \text{circ}
+    \EndWhile
+    \State \Return $S$  
+    \EndProcedure
+    \end{algorithmic}
+\end{algorithm}
+
+\begin{algorithm}
+    \begin{algorithmic}[1]
+        \Procedure{maximal-step}{arch, map, gates, $\addgate$}
+        \State Let $s.map \gets map$
+        \For{g in gates}
+        \State impl $\gets \addgate(g, \text{arch}, s)$
+        \If{\textit{impl} is not None}
+        \State $s$.add(g : impl) 
+        \EndIf
+    \EndFor
+    \State \Return $s$  
+    \EndProcedure
+    \end{algorithmic}
+\end{algorithm}
+
+
+\end{document}

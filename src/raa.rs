@@ -266,7 +266,7 @@ fn raa_step_cost(step: &RaaStep, arch: &RaaArchitecture) -> f64 {
     return cost;
 }
 
-pub fn raa_solve(c: &Circuit, arch: &RaaArchitecture) -> (Vec<RaaStep>, Vec<String>, f64) {
+pub fn raa_solve(c: &Circuit, arch: &RaaArchitecture) -> CompilerResult<RaaGateImplementation>{
     solve(
         c,
         arch,

@@ -3,10 +3,12 @@ use regex::Regex;
 use std::collections::{HashMap, HashSet};
 use std::fs::File;
 use std::io::{self, BufRead};
-#[derive(Hash, PartialEq, Eq, Clone, Copy, Debug)]
+use serde_json::Value;
+use serde::{Serialize, Deserialize};
+#[derive(Hash, PartialEq, Eq, Clone, Copy, Debug, Serialize)]
 pub struct Qubit(usize);
 
-#[derive(Hash, PartialEq, Eq, Clone, Copy, Debug, Default)]
+#[derive(Hash, PartialEq, Eq, Clone, Copy, Debug, Default, Serialize)]
 pub struct Location(usize);
 
 pub type QubitMap = HashMap<Qubit, Location>;
@@ -24,6 +26,14 @@ pub struct Gate {
     name: String,
     pub qubits: Vec<Qubit>,
     id: usize,
+}
+impl Serialize for Gate {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_str(&format!("{} {:?}", self.name, self.qubits))
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -69,7 +79,7 @@ pub fn circuit_from_gates(gates: Vec<Gate>) -> Circuit {
 
 pub trait GateImplementation {}
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize)]
 pub struct Step<T: GateImplementation> {
     pub map: QubitMap,
     pub implementation: HashMap<Gate, T>,
@@ -169,4 +179,47 @@ pub fn drop_zeros_and_normalize<T: IntoIterator<Item = (f64, f64)> + Clone>(
         }
     }
     return weighted_sum;
+}
+
+fn graph_from_edge_vec(edges: Vec<(Location, Location)>) -> Graph<Location, ()> {
+    let mut nodes = HashMap::new();
+    let mut g = Graph::new();
+    for (a, b) in &edges {
+        if !nodes.contains_key(a) {
+            nodes.insert(a, g.add_node(*a));
+        }
+        if !nodes.contains_key(b) {
+            nodes.insert(b, g.add_node(*b));
+        }
+        g.add_edge(nodes[a], nodes[b], ());
+
+    }
+    return  g;
+}
+
+pub fn graph_from_file(filename : &str) -> Graph<Location, ()> {
+    let file = File::open(filename).unwrap();
+    let parsed : Value = serde_json::from_reader(file).unwrap();
+    let edges = parsed
+        .as_array()
+        .expect("Expected an array of arrays")
+        .iter()
+        .map(|inner| {
+            let array = inner.as_array().expect("Inner element is not an array");
+            if array.len() != 2 {
+                panic!("Each edge must have exactly 2 elements");
+            }
+            let first = array[0].as_u64().expect("Element is not a positive integer") as usize;
+            let second = array[1].as_u64().expect("Element is not a positive integer") as usize;
+            (Location::new(first), Location::new(second))
+        })
+        .collect();
+    return graph_from_edge_vec(edges);
+}
+#[derive(Serialize, Debug)]
+pub struct CompilerResult<T : GateImplementation> {
+    pub steps : Vec<Step<T>>,
+    pub transitions : Vec<String>,
+    pub cost : f64,
+
 }

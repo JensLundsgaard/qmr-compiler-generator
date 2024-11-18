@@ -1,3 +1,5 @@
+use std::{env, fs};
+
 use nisq::{nisq_solve, NisqArchitecture};
 // use raa::{raa_solve, RaaArchitecture};
 mod backend;
@@ -21,7 +23,18 @@ fn raa_test() {
     println!("{:?}", raa::raa_solve(&circ, &arch));
 }
 
+fn run_nisq(circ_path : &str, graph_path : &str) {
+    let circ = utils::extract_cnots(circ_path);
+    let g = utils::graph_from_file(graph_path);
+    let arch = NisqArchitecture::new(g);
+    serde_json::to_writer(std::io::stdout(),  &nisq_solve(&circ, &arch)).unwrap();
+}
+
 fn main() {
-    raa_test();
-    nisq_test();
+    let args: Vec<String> = env::args().collect();
+    if args.len() != 3 {
+        println!("Usage: qmrl <circuit> <graph>");
+        return
+    }
+    run_nisq(&args[1], &args[2])
 }
