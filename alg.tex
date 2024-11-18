@@ -1,76 +1,85 @@
 \documentclass[anonymous, nonacm, acmsmall,screen,review]{acmart}
 \usepackage{algorithm}
+\usepackage[capitalise]{cleveref}
 
 \usepackage[noend]{algpseudocode}
-\newcommand{\stepcount}{t}
-\newcommand{\nextl}{R_\textsc{next}}
-\newcommand{\ours}{\textsc{dascot}\xspace}
-\newcommand{\autobraid}{Autobraid\xspace}
-\newcommand{\idplace}{\textrm{relaxed-identity}\xspace}
-\newcommand{\randplace}{\textsc{rand-map}\xspace} 
-\newcommand{\randplacegr}[1]{{\textsc{rand(#1)-greedy}\xspace}}
-\newcommand{\maxplace}{\textsc{maxsat-map}\xspace}
-\newcommand{\maxplacegr}{\textsc{maxsat-greedy}\xspace}
-\newcommand{\structplace}{\textsc{struct-map}\xspace}
-\newcommand{\layerplace}{\ours-\textsc{map}\xspace}
-\newcommand{\structplacegr}{\textsc{struct-greedy}\xspace}
-\newcommand{\opt}{\textsc{optimal}\xspace}
-\newcommand{\shortestfirst}{\textsc{shortest-first}\xspace}
-\newcommand{\greedyroute}{\textsc{greedy-route}\xspace}
-\newcommand{\lookaheadroute}{\textsc{\ours-route}\xspace}
-\newcommand{\interactgraph}{I}
-\newcommand{\gatesrouted}{\textsc{gates-routed}\xspace}
-\newcommand{\criticalgatesrouted}{\textsc{crit-gates-routed}\xspace}
-\newcommand{\reward}{R}
-\newcommand{\oursrandmap}{\textsc{\ours-randmap}\xspace}
-\newcommand{\oursrandroute}{\textsc{\ours-randroute}\xspace}
-\newcommand{\randroute}{\textsc{rand}\xspace}
-\newcommand{\ourslimited}{\textsc{limited}\xspace}
-\newcommand{\scc}{\textsc{scmr}\xspace}
-\newcommand{\scmr}{\textsc{scmr}\xspace}
-\newcommand{\scr}{\textsc{scr}\xspace}
-\newcommand{\rspace}{R_\textsc{space}}
-\newcommand{\rtime}{R_\textsc{time}}
 \newcommand{\arch}{A}
 \newcommand{\circuit}{C}
 \newcommand{\map}{M}
-\newcommand{\mapset}{M}
-\newcommand{\graph}{G}
-\newcommand{\vertices}{V}
-\newcommand{\edges}{E}
-\newcommand{\msf}{MS}
-\newcommand{\qset}{Q}
-\newcommand{\cost}{f}
 \DeclareMathOperator*{\argmax}{argmax}
 \DeclareMathOperator*{\argmin}{argmin}
-\DeclareMathOperator*{\conflicts}{\textsc{conflicts}}
-\DeclareMathOperator*{\criticality}{\textsc{criticality}}
-\DeclareMathOperator*{\routelayer}{\textsc{route-seq}}
-\DeclareMathOperator*{\maximalstep}{\textsf{maximal-step}}
+
+
+\DeclareMathOperator*{\maximalstep}{\textsc{maximal-step}}
 \DeclareMathOperator*{\addgate}{\textsf{implement-gate}}
+\DeclareMathOperator*{\transitions}{\textsf{transitions}}
+\DeclareMathOperator*{\cx}{\textsf{cx}}
 
 
 \title{A Language for Quantum Circuit Mapping \& Routing}
 \begin{document}
 \maketitle
-\section{The Meta-Solver}
-In this section we describe our algorithm for solving a generic mapping and routing problem. By
-projecting this  function with concrete arguments for \textsf{transitions}, $\addgate$, and
-\textsf{step-cost}, we obtain a solver for a particular mapping and routing problem. 
+\section{Our algorithm}
+\label{}
+
+In this section we describe our algorithm for solving a generic mapping and routing problem, shown in \cref{alg:solve}. %
+The result of mapping and routing is a sequence of \emph{steps}. %
+Each step represents a set of gates that can be executed in parallel on the architecture. %
+A step holds two maps: (1) a qubit map from circuit qubits to architecture locations and (2) an implementation
+map from circuit gates to implementations.  
+
+We begin with constructing a single step. %
+In order to minimize the total step count, our  solver produces \emph{maximal} steps, constructing a maximal
+subset of gates which can be implemented in parallel. We iterate over the set of executable gates (those with no unexecuted dependencies), and add any gate  we can. This subroutine is shown \cref{alg:max-step}. %
+To determine whether a gate can be added to the current step, we call the $\addgate$ function.
+The function $\addgate$ is part of the definition of a qubit mapping and routing problem. %
+It returns an implementation of the gate if there is one compatible with the existing step, and \textsf{None}
+otherwise. 
+
+\begin{example}
+    For the NISQ QMR problem, $\addgate(\arch, \map, \cx(q_i,q_j))$ returns the edge in $\arch$ between $\map(q_i)$
+    and $\map(q_j)$ if there is one and \textsf{None} otherwise.
+\end{example}
+
 
 \begin{algorithm}
     \begin{algorithmic}[1]
-        \Procedure{solve}{arch, circ, transitions, fn $\addgate$}
-        \State Intialize the step sequence $S$ 
+        \Procedure{$\maximalstep$}{arch $\arch$, map $\map$, gates $G$, \textbf{fn} $\addgate$}
+        \State Initialize $s$ with qubit map $\map$
+        \For{gate $g$ in $G$}
+        \State impl $\gets \addgate(\arch, \map, s)$
+        \If{\text{impl} is not None}
+        \State $s$.add(g : impl) 
+        \EndIf
+    \EndFor
+    \State \Return $s$  
+    \EndProcedure
+    \end{algorithmic}
+    \caption{}
+    \label{alg:max-step}
+\end{algorithm}
+Now we turn to executing an entire circuit as a sequence of steps. To choose the first step in the sequence, we simply apply $\maximalstep$ (lines 4-5 in \cref{alg:solve}). For subsequent steps,
+we have a choice of \emph{transition} to modify the qubit map between steps. This is another piece of defining a mapping and routing problem.
+The function $\transitions$ takes a step as input and returns the set of possible transitions. 
+A transition is a function over qubit maps with an associated cost.
+For example, in NISQ QMR, the transitions are SWAP operations, each with equal cost. Applying $\maximalstep$ may produce a different step, depending on which transition we take. 
+We explore the possible transitions, and pick a locally optimal one, i.e, the transition and step pair with lowest cost (the for loop in lines 7-12). 
+By default, the cost of a pair $(t, s)$ is simply the cost of $t$ minus the number of gates in $s$.
+Then, we add this step to the sequence and remove the routed gates (lines 13-14). This process repeats until all gates have beeen routed.
+\begin{algorithm}
+    \begin{algorithmic}[1]
+        \Procedure{solve}{arch $\arch$, circ $\circuit$, \textbf{fn} $\transitions$, \textbf{fn} $\addgate$}
+        \State Initialize an empty step sequence $S$ 
         \State Choose a qubit map $M$
-        \State $s_0 \gets \maximalstep(\text{arch}, M, \text{circ}.\text{front-layer()}, \addgate)$
+        \State $s_0 \gets \maximalstep(\arch, \map, \text{circ}.\textit{front-layer}, \addgate)$
+        \State $S.add(s_0)$.
         \While{$\circuit \neq \emptyset$} \Comment \emph{note we remove gates from $\circuit$}
-        \For{t in transitions}
-        \State $M \gets S.last().map()$
-        \State $M' \gets T(M)$ 
-        \State s $\gets \maximalstep(\mathrm{arch}, M', \mathrm{gates}, \addgate)$
-        \If{$cost(s) < cost(s^*)$}
-            \State $s^* \gets s$
+        \For{t in $\transitions(S.\textit{last})$}
+        \State $M \gets S.\textit{last.map}$
+        \State $M' \gets t(M)$ 
+        \State s $\gets \maximalstep(\mathrm{arch}, M', \text{circ}.\textit{front-layer}, \addgate)$
+        \If{$cost(s, t) < cost(s^*, t^*)$}
+            \State $s^*,t^* \gets s, t$
         \EndIf
 \EndFor
         \State Append $s^*$ to $S$
@@ -79,21 +88,8 @@ projecting this  function with concrete arguments for \textsf{transitions}, $\ad
     \State \Return $S$  
     \EndProcedure
     \end{algorithmic}
-\end{algorithm}
-
-\begin{algorithm}
-    \begin{algorithmic}[1]
-        \Procedure{maximal-step}{arch, map, gates, $\addgate$}
-        \State Let $s.map \gets map$
-        \For{g in gates}
-        \State impl $\gets \addgate(g, \text{arch}, s)$
-        \If{\textit{impl} is not None}
-        \State $s$.add(g : impl) 
-        \EndIf
-    \EndFor
-    \State \Return $s$  
-    \EndProcedure
-    \end{algorithmic}
+    \caption{Generic Mapping and Routing Algorithm}
+    \label{alg:solve}
 \end{algorithm}
 
 
