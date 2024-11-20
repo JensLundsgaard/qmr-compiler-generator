@@ -1,40 +1,25 @@
-use std::{env, fs};
+use qmrl::{nisq, raa, scmr, utils};
 
-use nisq::{nisq_solve, NisqArchitecture};
-// use raa::{raa_solve, RaaArchitecture};
-mod backend;
-mod nisq;
-mod raa;
-mod utils;
-
-fn nisq_test() {
-    let circ = utils::extract_cnots("/home/abtin/qmrsl/test.qasm");
-    let g = utils::path_graph(10);
-    let arch = NisqArchitecture::new(g);
-    println!("{:?}", nisq_solve(&circ, &arch));
-}
-
-fn raa_test() {
-    let circ = utils::extract_cnots("/home/abtin/qmrsl/test.qasm");
-    let arch = raa::RaaArchitecture {
-        width: 3,
-        height: 2,
-    };
-    println!("{:?}", raa::raa_solve(&circ, &arch));
-}
-
-fn run_nisq(circ_path : &str, graph_path : &str) {
+fn run_nisq(circ_path: &str, graph_path: &str, solve_mode: &str) {
     let circ = utils::extract_cnots(circ_path);
     let g = utils::graph_from_file(graph_path);
-    let arch = NisqArchitecture::new(g);
-    serde_json::to_writer(std::io::stdout(),  &nisq_solve(&circ, &arch)).unwrap();
+    let arch = nisq::NisqArchitecture::new(g);
+    let res = match solve_mode {
+        "sabre" => nisq::nisq_solve_sabre(&circ, &arch),
+        "onepass" => nisq::nisq_solve(&circ, &arch),
+        _ => panic!("Unrecognized solve mode"),
+    };
+    match serde_json::to_writer(std::io::stdout(), &res) {
+        Ok(_) => (),
+        Err(e) => panic!("Error writing compilation to stdout: {}", e),
+    }
 }
 
 fn main() {
-    let args: Vec<String> = env::args().collect();
-    if args.len() != 3 {
+    let args: Vec<String> = std::env::args().collect();
+    if args.len() != 4 {
         println!("Usage: qmrl <circuit> <graph>");
-        return
+        return;
     }
-    run_nisq(&args[1], &args[2])
+    run_nisq(&args[1], &args[2], &args[3]);
 }

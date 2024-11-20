@@ -1,4 +1,4 @@
-use crate::backend::solve;
+use crate::backend::{solve,sabre_solve};
 use crate::utils::{
     Architecture, Circuit, CompilerResult, Gate, GateImplementation, Location, Qubit, Step, Transition
 };
@@ -157,6 +157,17 @@ fn mapping_heuristic(arch: &NisqArchitecture, c: &Circuit, map: &HashMap<Qubit, 
         }
     }
     return cost as f64;
+}
+
+pub fn nisq_solve_sabre(c: &Circuit, a: &NisqArchitecture) -> CompilerResult<NisqGateImplementation> {
+    return sabre_solve(
+        c,
+        a,
+        &|_s| nisq_transitions(a),
+        nisq_implement_gate,
+        nisq_step_cost,
+        Some(mapping_heuristic),
+    );
 }
 
 pub fn nisq_solve(c: &Circuit, a: &NisqArchitecture) -> CompilerResult<NisqGateImplementation> {

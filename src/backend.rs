@@ -1,11 +1,12 @@
 use rand::seq::SliceRandom;
 
 use crate::utils::*;
-use std::collections::HashMap;
+use std::{collections::HashMap, fmt::Debug};
 const ALPHA: f64 = 1.0;
 const BETA: f64 = 1.0;
 const GAMMA: f64 = 1.0;
 const DELTA: f64 = 1.0;
+const SABRE_ITERATIONS: usize = 3;
 fn random_map<T: Architecture>(c: &Circuit, arch: &T) -> QubitMap {
     let mut map = HashMap::new();
     let mut rng = &mut rand::thread_rng();
@@ -20,7 +21,6 @@ fn random_map<T: Architecture>(c: &Circuit, arch: &T) -> QubitMap {
 fn simulated_anneal<T: Clone>(
     start: T,
     initial_temp: f64,
-
     term_temp: f64,
     cool_rate: f64,
     random_neighbor: impl Fn(&T) -> T,
@@ -105,14 +105,14 @@ fn sim_anneal_mapping_search<T: Architecture>(
     );
 }
 
-fn route<A: Architecture, R: Transition<G>, G: GateImplementation>(
+fn route<A: Architecture, R: Transition<G>, G: GateImplementation + Debug>(
     c: &Circuit,
     arch: &A,
     map: QubitMap,
     transitions: &impl Fn(&Step<G>) -> Vec<R>,
     implement_gate: fn(&Step<G>, &A, &Gate) -> Option<G>,
     step_cost: fn(&Step<G>, &A) -> f64,
-    map_eval: impl Fn(&Circuit, &QubitMap) -> f64,
+    map_eval: &impl Fn(&Circuit, &QubitMap) -> f64,
 ) -> CompilerResult<G> {
     let mut steps = Vec::new();
     let mut trans_taken = Vec::new();
@@ -121,7 +121,7 @@ fn route<A: Architecture, R: Transition<G>, G: GateImplementation>(
         implementation: HashMap::new(),
     };
     let mut current_circ = c.clone();
-    let mut cost = 0.0;
+    let mut cost = step_cost(&step_0, arch);
     let executable = &c.get_front_layer();
     step_0.max_step(executable, arch, implement_gate);
     current_circ.remove_gates(&(step_0.gates()));
@@ -149,7 +149,11 @@ fn route<A: Architecture, R: Transition<G>, G: GateImplementation>(
             }
         }
     }
-    return CompilerResult{steps, transitions: trans_taken, cost};
+    return CompilerResult {
+        steps,
+        transitions: trans_taken,
+        cost,
+    };
 }
 
 fn find_best_next_step<A: Architecture, R: Transition<G>, G: GateImplementation>(
@@ -188,7 +192,7 @@ fn find_best_next_step<A: Architecture, R: Transition<G>, G: GateImplementation>
     return best;
 }
 
-pub fn solve<A: Architecture, R: Transition<G>, G: GateImplementation>(
+pub fn solve<A: Architecture, R: Transition<G>, G: GateImplementation + Debug>(
     c: &Circuit,
     arch: &A,
     transitions: &impl Fn(&Step<G>) -> Vec<R>,
@@ -201,7 +205,7 @@ pub fn solve<A: Architecture, R: Transition<G>, G: GateImplementation>(
             let map_h = |m: &QubitMap| heuristic(arch, c, m);
             let route_h = |c: &Circuit, m: &QubitMap| heuristic(arch, c, m);
             let map =
-                sim_anneal_mapping_search(random_map(c, arch), arch, 1000.0, 0.0001, 0.99, map_h);
+                sim_anneal_mapping_search(random_map(c, arch), arch, 10000.0, 0.00001, 0.99, map_h);
             return route(
                 c,
                 arch,
@@ -209,7 +213,7 @@ pub fn solve<A: Architecture, R: Transition<G>, G: GateImplementation>(
                 transitions,
                 implement_gate,
                 step_cost,
-                route_h,
+                &route_h,
             );
         }
         None => {
@@ -221,8 +225,55 @@ pub fn solve<A: Architecture, R: Transition<G>, G: GateImplementation>(
                 transitions,
                 implement_gate,
                 step_cost,
-                |_c, _m| 0.0,
+                &|_c, _m| 0.0,
             );
         }
     }
+}
+
+pub fn sabre_solve<A: Architecture, R: Transition<G>, G: GateImplementation + Debug>(
+    c: &Circuit,
+    arch: &A,
+    transitions: &impl Fn(&Step<G>) -> Vec<R>,
+    implement_gate: fn(&Step<G>, &A, &Gate) -> Option<G>,
+    step_cost: fn(&Step<G>, &A) -> f64,
+    mapping_heuristic: Option<fn(&A, &Circuit, &QubitMap) -> f64>,
+) -> CompilerResult<G> {
+    let mut map = match mapping_heuristic {
+        Some(heuristic) => {
+            let map_h = |m: &QubitMap| heuristic(arch, c, m);
+            sim_anneal_mapping_search(random_map(c, arch), arch, 1000.0, 0.0001, 0.99, map_h)
+        }
+        None => random_map(c, arch),
+    };
+    let route_h: Box<dyn Fn(&Circuit, &QubitMap) -> f64> =
+        if let Some(ref heuristic) = mapping_heuristic {
+            Box::new(|c: &Circuit, m: &QubitMap| heuristic(arch, c, m))
+        } else {
+            Box::new(|_c: &Circuit, _m: &QubitMap| 0.0)
+        };
+
+    for i in 0..SABRE_ITERATIONS {
+        for circ in [c, &c.reversed()] {
+            let res = route(
+                circ,
+                arch,
+                map,
+                transitions,
+                implement_gate,
+                step_cost,
+                &route_h,
+            );
+            map = res.steps.last().unwrap().map.clone();
+        }
+    }
+    return route(
+        c,
+        arch,
+        map,
+        transitions,
+        implement_gate,
+        step_cost,
+        &route_h,
+    );
 }
