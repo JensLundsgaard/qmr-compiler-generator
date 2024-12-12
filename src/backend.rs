@@ -1,6 +1,7 @@
 use rand::seq::SliceRandom;
 
 use crate::utils::*;
+use crate::structures::*;
 use std::{collections::HashMap, fmt::Debug};
 const ALPHA: f64 = 1.0;
 const BETA: f64 = 1.0;
@@ -110,7 +111,7 @@ fn route<A: Architecture, R: Transition<G>, G: GateImplementation + Debug>(
     arch: &A,
     map: QubitMap,
     transitions: &impl Fn(&Step<G>) -> Vec<R>,
-    implement_gate: fn(&Step<G>, &A, &Gate) -> Option<G>,
+    implement_gate:  impl Fn(&Step<G>, &A, &Gate) -> Option<G>,
     step_cost: fn(&Step<G>, &A) -> f64,
     map_eval: &impl Fn(&Circuit, &QubitMap) -> f64,
 ) -> CompilerResult<G> {
@@ -123,7 +124,7 @@ fn route<A: Architecture, R: Transition<G>, G: GateImplementation + Debug>(
     let mut current_circ = c.clone();
     let mut cost = step_cost(&step_0, arch);
     let executable = &c.get_front_layer();
-    step_0.max_step(executable, arch, implement_gate);
+    step_0.max_step(executable, arch, &implement_gate);
     current_circ.remove_gates(&(step_0.gates()));
     steps.push(step_0);
     while current_circ.gates.len() > 0 {
@@ -131,7 +132,7 @@ fn route<A: Architecture, R: Transition<G>, G: GateImplementation + Debug>(
             &current_circ,
             arch,
             &transitions,
-            implement_gate,
+            &implement_gate,
             steps.last().unwrap(),
             step_cost,
             &map_eval,
@@ -160,7 +161,7 @@ fn find_best_next_step<A: Architecture, R: Transition<G>, G: GateImplementation>
     c: &Circuit,
     arch: &A,
     transitions: &impl Fn(&Step<G>) -> Vec<R>,
-    implement_gate: fn(&Step<G>, &A, &Gate) -> Option<G>,
+    implement_gate: impl Fn(&Step<G>, &A, &Gate) -> Option<G>,
     last_step: &Step<G>,
     step_cost: fn(&Step<G>, &A) -> f64,
     map_eval: impl Fn(&Circuit, &QubitMap) -> f64,
@@ -169,7 +170,7 @@ fn find_best_next_step<A: Architecture, R: Transition<G>, G: GateImplementation>
     for trans in transitions(last_step) {
         let mut next_step = trans.apply(last_step);
         let executable = c.get_front_layer();
-        next_step.max_step(&executable, arch, implement_gate);
+        next_step.max_step(&executable, arch, &implement_gate);
         let s_cost = step_cost(&next_step, arch);
         let t_cost = trans.cost();
         let m_cost = map_eval(&circuit_from_gates(executable), &next_step.map);
@@ -235,7 +236,7 @@ pub fn sabre_solve<A: Architecture, R: Transition<G>, G: GateImplementation + De
     c: &Circuit,
     arch: &A,
     transitions: &impl Fn(&Step<G>) -> Vec<R>,
-    implement_gate: fn(&Step<G>, &A, &Gate) -> Option<G>,
+    implement_gate: impl Fn(&Step<G>, &A, &Gate) -> Option<G>,
     step_cost: fn(&Step<G>, &A) -> f64,
     mapping_heuristic: Option<fn(&A, &Circuit, &QubitMap) -> f64>,
 ) -> CompilerResult<G> {
@@ -253,14 +254,14 @@ pub fn sabre_solve<A: Architecture, R: Transition<G>, G: GateImplementation + De
             Box::new(|_c: &Circuit, _m: &QubitMap| 0.0)
         };
 
-    for i in 0..SABRE_ITERATIONS {
+    for _ in 0..SABRE_ITERATIONS {
         for circ in [c, &c.reversed()] {
             let res = route(
                 circ,
                 arch,
                 map,
                 transitions,
-                implement_gate,
+                &implement_gate,
                 step_cost,
                 &route_h,
             );
@@ -272,7 +273,7 @@ pub fn sabre_solve<A: Architecture, R: Transition<G>, G: GateImplementation + De
         arch,
         map,
         transitions,
-        implement_gate,
+        &implement_gate,
         step_cost,
         &route_h,
     );

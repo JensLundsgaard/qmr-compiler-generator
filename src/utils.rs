@@ -4,133 +4,9 @@ use std::collections::{HashMap, HashSet};
 use std::fs::File;
 use std::io::{self, BufRead};
 use serde_json::Value;
-use serde::{Serialize, Deserialize};
-
+use serde::Serialize;
 use crate::scmr::ScmrArchitecture;
-#[derive(Hash, PartialEq, Eq, Clone, Copy, Debug, Serialize)]
-pub struct Qubit(usize);
-
-#[derive(Hash, PartialEq, Eq, Clone, Copy, Debug, Default, Serialize)]
-pub struct Location(usize);
-
-pub type QubitMap = HashMap<Qubit, Location>;
-
-impl Location {
-    pub fn new(i: usize) -> Self {
-        return Location(i);
-    }
-    pub fn get_index(&self) -> usize {
-        return self.0;
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub enum GateType {
-    CX,
-    T,
-}
-#[derive(Clone, Debug, Eq, Hash)]
-pub struct Gate {
-    pub gate_type : GateType,
-    pub qubits: Vec<Qubit>,
-    id: usize,
-}
-impl Serialize for Gate {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        serializer.serialize_str(&format!("{:?} {:?}", self.gate_type, self.qubits))
-    }
-}
-
-#[derive(Clone, Debug)]
-pub struct Circuit {
-    pub gates: Vec<Gate>,
-    pub qubits: HashSet<Qubit>,
-}
-
-impl PartialEq for Gate {
-    fn eq(&self, other: &Self) -> bool {
-        self.id == other.id
-    }
-}
-
-impl Circuit {
-    pub fn get_front_layer(&self) -> Vec<Gate> {
-        let mut blocked_qubits: HashSet<Qubit> = HashSet::new();
-        let mut gates = Vec::new();
-        for g in &self.gates {
-            let gate_qubits = &g.qubits;
-            let not_blocked = gate_qubits.iter().all(|q| !blocked_qubits.contains(q));
-            if not_blocked {
-                gates.push(g.clone());
-            }
-            blocked_qubits.extend(gate_qubits);
-        }
-        return gates;
-    }
-    pub fn remove_gates(&mut self, gates: &Vec<Gate>) {
-        self.gates.retain(|g| !gates.contains(g));
-    }
-    pub fn reversed(&self)-> Circuit {
-        let mut copy =  self.clone();
-        copy.gates.reverse();
-        return copy;
-    }
-}
-
-pub fn circuit_from_gates(gates: Vec<Gate>) -> Circuit {
-    let mut qubits = HashSet::new();
-    for gate in &gates {
-        for qubit in &gate.qubits {
-            qubits.insert(*qubit);
-        }
-    }
-    return Circuit { gates, qubits };
-}
-
-pub trait GateImplementation {}
-
-#[derive(Clone, Debug, Serialize)]
-pub struct Step<T: GateImplementation> {
-    pub map: QubitMap,
-    pub implementation: HashMap<Gate, T>,
-}
-
-impl<G: GateImplementation> Step<G> {
-    pub fn max_step<A: Architecture>(
-        &mut self,
-        executable: &Vec<Gate>,
-        arch: &A,
-        implement_gate: fn(&Step<G>, &A, &Gate) -> Option<G>,
-    ) {
-        assert!(self.implementation.is_empty());
-        for gate in executable {
-            let implementation = implement_gate(self, arch, gate);
-            match implementation {
-                None => continue,
-                Some(implementation) => {
-                    self.implementation.insert(gate.clone(), implementation);
-                }
-            }
-        }
-    }
-
-    pub fn gates(&self) -> Vec<Gate> {
-        return self.implementation.keys().cloned().collect();
-    }
-}
-
-pub trait Transition<T: GateImplementation> {
-    fn apply(&self, step: &Step<T>) -> Step<T>;
-    fn repr(&self) -> String;
-    fn cost(&self) -> f64;
-}
-
-pub trait Architecture {
-    fn get_locations(&self) -> Vec<Location>;
-}
+use crate::structures::*;
 
 pub fn extract_cnots(filename: &str) -> Circuit {
     let file = File::open(filename).unwrap();
@@ -145,8 +21,8 @@ pub fn extract_cnots(filename: &str) -> Circuit {
         match cx_caps {
             None => continue,
             Some(c) => {
-                let q1 = Qubit(c.get(1).unwrap().as_str().parse::<usize>().unwrap());
-                let q2 = Qubit(c.get(2).unwrap().as_str().parse::<usize>().unwrap());
+                let q1 = Qubit::new(c.get(1).unwrap().as_str().parse::<usize>().unwrap());
+                let q2 = Qubit::new(c.get(2).unwrap().as_str().parse::<usize>().unwrap());
                 qubits.insert(q1);
                 qubits.insert(q2);
                 let gate = Gate {
@@ -178,7 +54,7 @@ pub fn extract_scmr_gates(filename: &str) -> Circuit {
             None => {match t_caps {
                 None => continue,
                 Some(c) => {
-                    let q = Qubit(c.get(2).unwrap().as_str().parse::<usize>().unwrap());
+                    let q = Qubit::new(c.get(2).unwrap().as_str().parse::<usize>().unwrap());
                     qubits.insert(q);
                     let gate = Gate {
                         gate_type : GateType::T,
@@ -190,8 +66,8 @@ pub fn extract_scmr_gates(filename: &str) -> Circuit {
                 }
             }},
             Some(c) => {
-                let q1 = Qubit(c.get(1).unwrap().as_str().parse::<usize>().unwrap());
-                let q2 = Qubit(c.get(2).unwrap().as_str().parse::<usize>().unwrap());
+                let q1 = Qubit::new(c.get(1).unwrap().as_str().parse::<usize>().unwrap());
+                let q2 = Qubit::new(c.get(2).unwrap().as_str().parse::<usize>().unwrap());
                 qubits.insert(q1);
                 qubits.insert(q2);
                 let gate = Gate {
@@ -211,7 +87,7 @@ pub fn path_graph(n: usize) -> Graph<Location, ()> {
     let mut g = Graph::new();
     let mut nodes = Vec::new();
     for i in 0..n {
-        nodes.push(g.add_node(Location(i)));
+        nodes.push(g.add_node(Location::new(i)));
     }
     for i in 0..n - 1 {
         g.add_edge(nodes[i], nodes[i + 1], ());
@@ -249,7 +125,9 @@ fn graph_from_edge_vec(edges: Vec<(Location, Location)>) -> Graph<Location, ()> 
         if !nodes.contains_key(b) {
             nodes.insert(b, g.add_node(*b));
         }
-        g.add_edge(nodes[a], nodes[b], ());
+        // edges are undirected
+        g.update_edge(nodes[a], nodes[b], ());
+        g.update_edge(nodes[b], nodes[a], ());
 
     }
     return  g;
@@ -285,10 +163,10 @@ pub struct CompilerResult<T : GateImplementation> {
 pub fn vertical_neighbors(loc : &Location, width : usize, height : usize) -> Vec<Location>{
     let mut neighbors = Vec::new();
     if loc.get_index() / width > 0 {
-        neighbors.push(Location(loc.0 - width));
+        neighbors.push(Location::new(loc.get_index() - width));
     }
     if loc.get_index() / width < height - 1 {
-        neighbors.push(Location(loc.0 + width));
+        neighbors.push(Location::new(loc.get_index() + width));
     }
     return neighbors;
 }
@@ -296,10 +174,10 @@ pub fn vertical_neighbors(loc : &Location, width : usize, height : usize) -> Vec
 pub fn horizontal_neighbors(loc : &Location, width : usize) -> Vec<Location>{
     let mut neighbors = Vec::new();
     if loc.get_index() % width > 0 {
-        neighbors.push(Location(loc.get_index() - 1));
+        neighbors.push(Location::new(loc.get_index() - 1));
     }
     if loc.get_index() % width < width - 1 {
-        neighbors.push(Location(loc.get_index()+1));
+        neighbors.push(Location::new(loc.get_index()+1));
     }
     return neighbors;
 }
@@ -309,14 +187,14 @@ pub fn compact_layout(alg_qubit_count : usize) -> ScmrArchitecture{
     let height = 5;
     let mut alg_qubits = Vec::new();
     for i in (1..width-1).step_by(2){
-        alg_qubits.push(Location(width+i));
-        alg_qubits.push(Location(i+width*3));
+        alg_qubits.push(Location::new(width+i));
+        alg_qubits.push(Location::new(i+width*3));
     }
     let mut perimeter = Vec::new();
-    let top_edge = (0..width).map(|i| Location(i));
-    let right_edge = (1..height).map(|i| Location(i*width+width-1));
-    let bottom_edge = (0..width-1).rev().map(|i| Location(i+width*(height-1)));
-    let left_edge = (1..height-1).rev().map(|i| Location(i*width));
+    let top_edge = (0..width).map(|i| Location::new(i));
+    let right_edge = (1..height).map(|i| Location::new(i*width+width-1));
+    let bottom_edge = (0..width-1).rev().map(|i| Location::new(i+width*(height-1)));
+    let left_edge = (1..height-1).rev().map(|i| Location::new(i*width));
     perimeter.extend(top_edge);
     perimeter.extend(right_edge);
     perimeter.extend(bottom_edge);
@@ -332,4 +210,20 @@ pub fn compact_layout(alg_qubit_count : usize) -> ScmrArchitecture{
         alg_qubits,
         magic_state_qubits,
     };
+}
+
+
+fn swap_keys(
+    map: &HashMap<Qubit, Location>,
+    locs: (Location, Location),
+) -> HashMap<Qubit, Location> {
+    let mut new_map = map.clone();
+    for (qubit, loc) in map {
+        if loc == &locs.0 {
+            new_map.insert(*qubit, locs.1);
+        } else if loc == &locs.1 {
+            new_map.insert(*qubit, locs.0);
+        }
+    }
+    return new_map;
 }

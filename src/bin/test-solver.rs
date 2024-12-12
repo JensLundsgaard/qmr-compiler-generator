@@ -24,7 +24,7 @@ fn scmr_test() {
 }
 
 fn main() {
-    // nisq_test();
+    nisq_test();
     // raa_test();
-    scmr_test();
+    // scmr_test();
 }

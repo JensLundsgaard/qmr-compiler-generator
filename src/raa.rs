@@ -1,4 +1,4 @@
-use crate::{backend::solve, utils::*};
+use crate::{backend::solve, utils::*, structures::*};
 use std::collections::{HashMap, HashSet};
 
 const ACCELERATION_CONST: f64 = 2750.0;

@@ -1,8 +1,9 @@
 use std::collections::HashMap;
 
+
 use petgraph::{graph::NodeIndex, Graph};
 
-use crate::{backend::solve, utils::*};
+use crate::{backend::solve, utils::*, structures::*};
 
 pub struct ScmrArchitecture {
     pub width: usize,
@@ -87,11 +88,11 @@ impl Transition<ScmrGateImplementation> for IdTransition {
     }
 }
 
-fn scmr_transitions(step: &ScmrStep) -> Vec<IdTransition> {
+fn scmr_transitions(_step: &ScmrStep) -> Vec<IdTransition> {
     return vec![IdTransition];
 }
 
-fn scmr_step_cost(step: &ScmrStep, arch: &ScmrArchitecture) -> f64 {
+fn scmr_step_cost(_step: &ScmrStep, _arch: &ScmrArchitecture) -> f64 {
     return 1.0;
 }
 
@@ -126,14 +127,14 @@ fn scmr_implement_gate(
         loc_to_node.remove(&loc);
     }
     let (starts, ends) = match &gate.gate_type {
-        crate::utils::GateType::CX => {
+       GateType::CX => {
             let (cpos, tpos) = (&step.map[&gate.qubits[0]], &step.map[&gate.qubits[1]]);
             (
                 vertical_neighbors(cpos, arch.width, arch.height),
                 horizontal_neighbors(tpos, arch.width),
             )
         }
-        crate::utils::GateType::T => {
+        GateType::T => {
             let pos = &step.map[&gate.qubits[0]];
             let target_neighbors = vertical_neighbors(pos, arch.width, arch.height);
             let msf_neighors = arch
@@ -155,7 +156,7 @@ fn scmr_implement_gate(
                     &graph,
                     loc_to_node[&start],
                     |finish| finish == loc_to_node[&end],
-                    |e| 1,
+                    |_e| 1,
                     |_| 0,
                 );
                 if best.is_none()

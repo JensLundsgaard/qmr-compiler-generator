@@ -3,3 +3,7 @@ pub mod nisq;
 pub mod raa;
 pub mod scmr;
 pub mod utils;
+pub mod ast;
+pub mod structures;
+pub mod emit;
+pub mod parse;

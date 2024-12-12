@@ -1,11 +1,10 @@
 use crate::backend::{solve,sabre_solve};
-use crate::utils::{
-    Architecture, Circuit, CompilerResult, Gate, GateImplementation, Location, Qubit, Step, Transition
-};
+use crate::utils::*;
+use crate::structures::*;
 use petgraph::{graph::NodeIndex, Graph};
 use serde::Serialize;
 use std::collections::HashMap;
-use std::usize::MAX;
+
 
 pub struct NisqArchitecture {
     graph: Graph<Location, ()>,
@@ -48,7 +47,7 @@ fn swap_on_edge(
     }
     return new_map;
 }
-
+#[derive(Debug)]
 struct NisqTrans {
     edge: (Location, Location),
 }
@@ -69,7 +68,7 @@ impl Transition<NisqGateImplementation> for NisqTrans {
         return new_step;
     }
     fn repr(&self) -> String {
-        return format!("swap {:?} {:?}", self.edge.0, self.edge.1);
+        return format!("{:?}", self);
     }
 
     fn cost(&self) -> f64 {

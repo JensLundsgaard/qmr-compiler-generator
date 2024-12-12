@@ -1,0 +1,17 @@
+GateRealization[
+    filter = gate_type.equals('cx'),
+    data = edge(v1 : Int, v2 : Int),
+    realize_gate(s : Step, a : Arch, g : Gate) = 
+        if (step.map[g.0],step.map[g.1]) in arch.edges 
+            then (step.map[g.0],step.map[g.1]) 
+            else None
+]
+
+
+
+Transition[
+    data = edge(v1 : Int, v2 : Int),
+    get_transitiosn()
+    apply(t : transition, m : QubitMap) = swap_keys(m, t.edge)
+    cost(t : transiton) = 1
+]
