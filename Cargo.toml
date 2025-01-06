@@ -2,6 +2,7 @@
 name = "qmrl"
 version = "0.1.0"
 edition = "2021"
+build="build/main.rs"
 
 [dependencies]
 petgraph = "0.6.5"
@@ -13,4 +14,10 @@ regex = "1.11.1"
 serde = { version = "1.0.215", features = ["derive"] }
 serde_json = "1.0.132"
 syn = "2.0.90"
+
+[build-dependencies]
+syn = "2.0.90"
+prettyplease = "0.2.25"
+proc-macro2 = "1.0.92"
+quote = "1.0.37"
 

@@ -145,3 +145,11 @@ pub trait Transition<T: GateImplementation> {
 pub trait Architecture {
     fn get_locations(&self) -> Vec<Location>;
 }
+
+#[derive(Serialize, Debug)]
+pub struct CompilerResult<T : GateImplementation> {
+    pub steps : Vec<Step<T>>,
+    pub transitions : Vec<String>,
+    pub cost : f64,
+
+}

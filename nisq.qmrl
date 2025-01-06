@@ -2,7 +2,7 @@ GateRealization[
     filter = gate_type.equals('cx'),
     data = edge(v1 : Int, v2 : Int),
     realize_gate(s : Step, a : Arch, g : Gate) = 
-        if (step.map[g.0],step.map[g.1]) in arch.edges 
+        if arch.contains_edge((map[g.0], map[g.0]))
             then (step.map[g.0],step.map[g.1]) 
             else None
 ]
@@ -11,7 +11,7 @@ GateRealization[
 
 Transition[
     data = edge(v1 : Int, v2 : Int),
-    get_transitiosn()
+    get_transitions(s : Step , a : Arch) = map(\x -> edge(x.0, x.1), arch.edges()).push(Swap(0, 0))
     apply(t : transition, m : QubitMap) = swap_keys(m, t.edge)
     cost(t : transiton) = 1
 ]

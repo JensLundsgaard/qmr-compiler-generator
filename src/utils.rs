@@ -152,13 +152,7 @@ pub fn graph_from_file(filename : &str) -> Graph<Location, ()> {
         .collect();
     return graph_from_edge_vec(edges);
 }
-#[derive(Serialize, Debug)]
-pub struct CompilerResult<T : GateImplementation> {
-    pub steps : Vec<Step<T>>,
-    pub transitions : Vec<String>,
-    pub cost : f64,
 
-}
 
 pub fn vertical_neighbors(loc : &Location, width : usize, height : usize) -> Vec<Location>{
     let mut neighbors = Vec::new();
@@ -213,17 +207,24 @@ pub fn compact_layout(alg_qubit_count : usize) -> ScmrArchitecture{
 }
 
 
-fn swap_keys(
+pub fn swap_keys(
     map: &HashMap<Qubit, Location>,
-    locs: (Location, Location),
+    loc1 : Location,
+    loc2 : Location,
 ) -> HashMap<Qubit, Location> {
     let mut new_map = map.clone();
     for (qubit, loc) in map {
-        if loc == &locs.0 {
-            new_map.insert(*qubit, locs.1);
-        } else if loc == &locs.1 {
-            new_map.insert(*qubit, locs.0);
+        if loc == &loc1 {
+            new_map.insert(*qubit, loc2);
+        } else if loc == &loc2 {
+            new_map.insert(*qubit, loc1);
         }
     }
     return new_map;
+}
+
+pub fn push_and_return<T : Clone>(vec : Vec<T>, item : T) -> Vec<T>{
+    let mut new = vec.clone();
+    new.push(item);
+    return new;
 }

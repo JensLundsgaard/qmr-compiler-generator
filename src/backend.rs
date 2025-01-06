@@ -106,7 +106,7 @@ fn sim_anneal_mapping_search<T: Architecture>(
     );
 }
 
-fn route<A: Architecture, R: Transition<G>, G: GateImplementation + Debug>(
+fn route<A: Architecture, R: Transition<G> + Debug, G: GateImplementation + Debug>(
     c: &Circuit,
     arch: &A,
     map: QubitMap,
@@ -137,6 +137,8 @@ fn route<A: Architecture, R: Transition<G>, G: GateImplementation + Debug>(
             step_cost,
             &map_eval,
         );
+        // println!("{:?}", best);
+        // println!("{:?}", current_circ);
         match best {
             Some((s, trans, _b)) => {
                 current_circ.remove_gates(&s.gates());
@@ -169,6 +171,8 @@ fn find_best_next_step<A: Architecture, R: Transition<G>, G: GateImplementation>
     let mut best: Option<(Step<G>, R, f64)> = None;
     for trans in transitions(last_step) {
         let mut next_step = trans.apply(last_step);
+        println!("trans: {:?}, new map : {:?} old map  : {:?}", trans.repr(), next_step.map, last_step.map);
+        println!("old map  : {:?}", last_step.map);
         let executable = c.get_front_layer();
         next_step.max_step(&executable, arch, &implement_gate);
         let s_cost = step_cost(&next_step, arch);
@@ -193,7 +197,7 @@ fn find_best_next_step<A: Architecture, R: Transition<G>, G: GateImplementation>
     return best;
 }
 
-pub fn solve<A: Architecture, R: Transition<G>, G: GateImplementation + Debug>(
+pub fn solve<A: Architecture, R: Transition<G> + Debug, G: GateImplementation + Debug>(
     c: &Circuit,
     arch: &A,
     transitions: &impl Fn(&Step<G>) -> Vec<R>,
@@ -232,7 +236,7 @@ pub fn solve<A: Architecture, R: Transition<G>, G: GateImplementation + Debug>(
     }
 }
 
-pub fn sabre_solve<A: Architecture, R: Transition<G>, G: GateImplementation + Debug>(
+pub fn sabre_solve<A: Architecture, R: Transition<G> + Debug, G: GateImplementation + Debug>(
     c: &Circuit,
     arch: &A,
     transitions: &impl Fn(&Step<G>) -> Vec<R>,
