@@ -1,17 +1,18 @@
 GateRealization[
-    filter = gate_type.equals('cx'),
-    data = edge(v1 : Int, v2 : Int),
-    realize_gate(s : Step, a : Arch, g : Gate) = 
-        if arch.contains_edge((map[g.0], map[g.0]))
-            then (step.map[g.0],step.map[g.1]) 
+    name = 'NisqCnot'
+    data = (u : Location, v : Location)
+    realize_gate = if Arch.contains_edge((Step.Map[Gate.qubits[0]],Step.Map[Gate.qubits[1]]))
+            then Some(GateRealization{u = Step.Map[Gate.qubits[0]],v = Step.Map[Gate.qubits[1]]})
             else None
 ]
 
 
-
 Transition[
-    data = edge(v1 : Int, v2 : Int),
-    get_transitions(s : Step , a : Arch) = map(\x -> edge(x.0, x.1), arch.edges()).push(Swap(0, 0))
-    apply(t : transition, m : QubitMap) = swap_keys(m, t.edge)
-    cost(t : transiton) = 1
+    name = 'Swap'
+    data = (edge : (Location,Location))
+    get_transitions = (map(|x| -> Transition{ edge = x}, Arch.edges())).push(Transition{edge = (Location(0),Location(0))})
+    apply = value_swap(Transition.edge.0, Transition.edge.1)
+    cost = if (Transition.edge)==(Location(0), Location(0))
+            then 0.0
+            else 1.0
 ]

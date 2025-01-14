@@ -22,6 +22,7 @@ pub fn emit_program(p: ProblemDefinition) -> TokenStream {
     let define_realize_gate_function = emit_realize_gate_function(&p.imp);
     let define_solve_function = emit_solve_function(&p.imp);
     let define_sabre_solve_function = emit_sabre_solve_function(&p.imp);
+    let define_mapping_heuristic = emit_mapping_heuristic();
     quote! {
         #use_statements
         #define_gi_struct
@@ -33,6 +34,7 @@ pub fn emit_program(p: ProblemDefinition) -> TokenStream {
         #implement_trans_trait
         #define_available_transitions
         #define_realize_gate_function
+        #define_mapping_heuristic
         #define_solve_function
         #define_sabre_solve_function
 
@@ -48,7 +50,7 @@ fn emit_define_struct(data: &NamedTuple) -> TokenStream {
         quote! { #field_name : #field_ty }
     });
     quote! {
-        #[derive(Debug, Clone)]
+        #[derive(Debug, Clone, serde::Serialize)]
         pub struct #struct_name {
             #(#fields),*
         }
@@ -176,7 +178,7 @@ fn emit_available_transitions(t: &TransitionBlock, imp: &ImplBlock) -> TokenStre
     let imp_struct_name = syn::Ident::new(&imp.data.name, Span::call_site());
     let available_trans_expr = emit_expr(&t.get_transitions, &Context::Free, &trans_struct_name, &imp_struct_name); 
     let trans_struct_name = syn::Ident::new(&t.data.name, Span::call_site());
-    let imp_struct_name = syn::Ident::new(&imp.data.name, Span::call_site());;
+    let imp_struct_name = syn::Ident::new(&imp.data.name, Span::call_site());
     quote! {
             fn available_transitions(arch : &MyArch, step : &Step<#imp_struct_name>) -> Vec<#trans_struct_name> {
                #available_trans_expr
@@ -198,11 +200,31 @@ fn emit_realize_gate_function(imp: &ImplBlock) -> TokenStream {
     }
 }
 
+fn emit_mapping_heuristic() -> TokenStream {
+    quote! {
+        fn mapping_heuristic(arch: &MyArch, c: &Circuit, map: &HashMap<Qubit, Location>) -> f64 {
+            let graph = &arch.graph;
+            let mut cost = 0;
+            for gate in &c.gates {
+                let (cpos, tpos) = (map.get(&gate.qubits[0]), map.get(&gate.qubits[1]));
+                let (cind, tind) = (arch.index_map[cpos.unwrap()], arch.index_map[tpos.unwrap()]);
+                let sp_res = petgraph::algo::astar(graph, cind, |n| n == tind, |_| 1, |_| 1);
+                match sp_res {
+                    Some((c, _)) => cost += c,
+                    None => panic!("Disconnected graph. No path found from {:?} to {:?}", cpos, tpos)
+                }
+            }
+            return cost as f64;
+        }
+        
+    }
+}
+
 fn emit_solve_function(imp: &ImplBlock) -> TokenStream {
     let imp_struct_name = syn::Ident::new(&imp.data.name, Span::call_site());
     quote! {
         fn my_solve(c : &Circuit, a : &MyArch) -> CompilerResult<#imp_struct_name> {
-            return backend::solve(c, a, &|s| available_transitions(a, s), realize_gate, |_s, _a| 0.0, None);
+            return backend::solve(c, a, &|s| available_transitions(a, s), realize_gate, |_s, _a| 0.0, Some(mapping_heuristic));
     }
     }
 }
@@ -211,7 +233,7 @@ fn emit_sabre_solve_function(imp: &ImplBlock) -> TokenStream {
     let imp_struct_name = syn::Ident::new(&imp.data.name, Span::call_site());
     quote! {
         fn my_sabre_solve(c : &Circuit, a : &MyArch) -> CompilerResult<#imp_struct_name> {
-            return backend::sabre_solve(c, a, &|s| available_transitions(a, s), realize_gate, |_s, _a| 0.0, None);
+            return backend::sabre_solve(c, a, &|s| available_transitions(a, s), realize_gate, |_s, _a| 0.0, Some(mapping_heuristic));
     }
     }
 }
@@ -231,7 +253,7 @@ fn emit_expr(e: &Expr, context: &Context, trans_struct_name : &Ident, imp_struct
             }
         }
         Expr::GetData { d, access } => {
-            let field_name = emit_access_expr(access);
+            let field_name = emit_access_expr(access, context, trans_struct_name, imp_struct_name);
             let name = match (context, d) {
                 (Context::DataTypeContext(dc), d) if dc == d => "self",
                 (_, DataType::Arch) => "arch",
@@ -239,6 +261,7 @@ fn emit_expr(e: &Expr, context: &Context, trans_struct_name : &Ident, imp_struct
                 (_, DataType::Step) => "step",
                 (_, DataType::Impl) => "gi",
                 (_, DataType::Gate) => "gate",
+ 
             };
             let data_name = syn::Ident::new(name, Span::call_site());
             quote! {
@@ -307,7 +330,7 @@ fn emit_expr(e: &Expr, context: &Context, trans_struct_name : &Ident, imp_struct
         Expr::MapAccess(expr) => {
             let emit_inner = emit_expr(expr, context, &trans_struct_name, &imp_struct_name);
             quote! {
-                step.map[#emit_inner]
+                step.map[&#emit_inner]
             }
         }
         Expr::NoneExpr => quote! {None},
@@ -315,10 +338,7 @@ fn emit_expr(e: &Expr, context: &Context, trans_struct_name : &Ident, imp_struct
             let emit_inner = emit_expr(expr, context, &trans_struct_name, &imp_struct_name);
             quote! {Some(#emit_inner)}
         }
-        Expr::QubitAccess(n) => {            
-            let unsuffixed = syn::Index::from(*n);
-            quote! {&gate.qubits[#unsuffixed]}
-        }        
+
         Expr::MapIterExpr{container, func} => {
             let emit_container = emit_expr(container, context, &trans_struct_name, &imp_struct_name);
             let emit_func = emit_expr(func, context, &trans_struct_name, &imp_struct_name);
@@ -338,7 +358,7 @@ fn emit_expr(e: &Expr, context: &Context, trans_struct_name : &Ident, imp_struct
                 }
             }
         }
-        Expr::VarExpr(s) => {
+        Expr::Ident(s) => {
             let var_name = syn::Ident::new(s, Span::call_site());
             quote! {*#var_name}
         }
@@ -347,19 +367,28 @@ fn emit_expr(e: &Expr, context: &Context, trans_struct_name : &Ident, imp_struct
             let right = emit_expr(expr1, context, &trans_struct_name, &imp_struct_name);
             quote! {#left == #right}
         },
+        Expr::IndexLiteral(i) => {
+            let unsuffixed = syn::Index::from(*i);
+            quote! {#unsuffixed}
+        },
     }
 }
 
-fn emit_access_expr(a: &AccessExpr) -> TokenStream {
+fn emit_access_expr(a: &AccessExpr, c : &Context, trans_struct_name : &Ident, imp_struct_name : &Ident) -> TokenStream {
     match a {
         AccessExpr::Field(name) => {
             let field_name = syn::Ident::new(name, Span::call_site());
             quote! {#field_name}
         }
-        AccessExpr::IndexInto(a, i) => {
-            let emit_a = emit_access_expr(a);
-            let unsuffixed = syn::Index::from(*i);
-            quote! {#emit_a.#unsuffixed}
+        AccessExpr::TupleAccess(name, i) => {
+            let field_name = syn::Ident::new(name, Span::call_site());
+            let emit_i = emit_expr(i, c, trans_struct_name, imp_struct_name);
+            quote! {#field_name.#emit_i}
+        }
+        AccessExpr::ArrayAccess(name, i) => {
+            let field_name = syn::Ident::new(name, Span::call_site());
+            let emit_i = emit_expr(i, c, trans_struct_name, imp_struct_name);
+            quote! {#field_name[#emit_i]}
         }
     }
 }

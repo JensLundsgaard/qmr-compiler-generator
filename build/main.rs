@@ -1,9 +1,11 @@
 mod ast;
 mod emit;
+mod parse;
 use std::{env, path::Path, vec};
 
 use ast::*;
 use emit::write_to_file;
+use syn::Data;
 
 fn test_program() -> ProblemDefinition {
     ProblemDefinition {
@@ -20,18 +22,42 @@ fn test_program() -> ProblemDefinition {
                     d: DataType::Arch,
                     method: "contains_edge".to_string(),
                     args: vec![Expr::Tuple(vec![
-                        Expr::MapAccess(Box::new(Expr::QubitAccess(0))),
-                        Expr::MapAccess(Box::new(Expr::QubitAccess(1))),
+                        Expr::MapAccess(Box::new(Expr::GetData {
+                            d: DataType::Gate,
+                            access: AccessExpr::ArrayAccess(
+                                "qubits".to_string(),
+                                Box::new(Expr::IndexLiteral(0)),
+                            ),
+                        })),
+                        Expr::MapAccess(Box::new(Expr::GetData {
+                            d: DataType::Gate,
+                            access: AccessExpr::ArrayAccess(
+                                "qubits".to_string(),
+                                Box::new(Expr::IndexLiteral(1)),
+                            ),
+                        })),
                     ])],
                 }),
                 then: Box::new(Expr::SomeExpr(Box::new(Expr::ImplConstructorExpr(vec![
                     (
                         "u".to_string(),
-                        Expr::MapAccess(Box::new(Expr::QubitAccess(0))),
+                        Expr::MapAccess(Box::new(Expr::GetData {
+                            d: DataType::Gate,
+                            access: AccessExpr::ArrayAccess(
+                                "qubits".to_string(),
+                                Box::new(Expr::IndexLiteral(0)),
+                            ),
+                        })),
                     ),
                     (
                         "v".to_string(),
-                        Expr::MapAccess(Box::new(Expr::QubitAccess(1))),
+                        Expr::MapAccess(Box::new(Expr::GetData {
+                            d: DataType::Gate,
+                            access: AccessExpr::ArrayAccess(
+                               "qubits".to_string(),
+                                Box::new(Expr::IndexLiteral(1)),
+                            ),
+                        })),
                     ),
                 ])))),
                 els: Box::new(Expr::NoneExpr),
@@ -48,16 +74,16 @@ fn test_program() -> ProblemDefinition {
             apply: Expr::SwapPair(
                 Box::new(Expr::GetData {
                     d: DataType::Transition,
-                    access: AccessExpr::IndexInto(
-                        Box::new(AccessExpr::Field("edge".to_string())),
-                        0,
+                    access: AccessExpr::TupleAccess(
+                        "edge".to_string(),
+                        Box::new(Expr::IndexLiteral(0)),
                     ),
                 }),
                 Box::new(Expr::GetData {
                     d: DataType::Transition,
-                    access: AccessExpr::IndexInto(
-                        Box::new(AccessExpr::Field("edge".to_string())),
-                        1,
+                    access: AccessExpr::TupleAccess(
+                        "edge".to_string(),
+                        Box::new(Expr::IndexLiteral(1)),
                     ),
                 }),
             ),
@@ -67,10 +93,11 @@ fn test_program() -> ProblemDefinition {
                         d: DataType::Transition,
                         access: AccessExpr::Field("edge".to_string()),
                     }),
-                    Box::new(Expr::Tuple(vec![
-                        Expr::Tuple(vec![Expr::LocationLiteral(0), Expr::LocationLiteral(0)]),
-                    ]))),
-                ),
+                    Box::new(Expr::Tuple(vec![Expr::Tuple(vec![
+                        Expr::LocationLiteral(0),
+                        Expr::LocationLiteral(0),
+                    ])])),
+                )),
                 then: Box::new(Expr::FloatLiteral(0f64)),
                 els: Box::new(Expr::FloatLiteral(1f64)),
             },
@@ -83,7 +110,7 @@ fn test_program() -> ProblemDefinition {
                     }),
                     func: Box::new(Expr::TransitionConstructor(vec![(
                         "edge".to_string(),
-                        Expr::VarExpr("x".to_string()),
+                        Expr::Ident("x".to_string()),
                     )])),
                 }),
                 elem: Box::new(Expr::TransitionConstructor(vec![(
@@ -96,9 +123,17 @@ fn test_program() -> ProblemDefinition {
     }
 }
 
-fn main() {
-    let p = test_program();
+
+fn from_file(){
+    let path = env::var("QMRL_PATH").unwrap_or("nisq.qmrl".to_string());
+    let p = parse::read_file(&path);
     let out_dir = env::var_os("OUT_DIR").unwrap();
     let dest_path = Path::new(&out_dir).join("custom.rs");
     write_to_file(p, dest_path.to_str().unwrap());
+
 }
+
+fn main() {
+    from_file();
+    }
+    
