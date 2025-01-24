@@ -1,4 +1,3 @@
-
 use qmrl::{nisq, raa, scmr, utils};
 include!(concat!(env!("OUT_DIR"), "/custom.rs"));
 
@@ -11,8 +10,8 @@ fn nisq_test() {
 
 fn custom_test() {
     let circ = utils::extract_cnots("/home/abtin/qmrsl/3_17_13.qasm");
-    let g = utils::path_graph(3);
-    let arch = MyArch::new(g);
+    let g = utils::path_graph(10);
+    let arch = CustomArch::new(g);
     println!("{:?}", my_solve(&circ, &arch));
 }
 

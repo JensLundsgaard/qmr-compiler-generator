@@ -1,5 +1,12 @@
-use std::{collections::{HashMap, HashSet}, fmt};
 use serde::Serialize;
+use serde::Deserialize;
+use std::hash::Hash;
+use std::{
+    collections::{HashMap, HashSet},
+    fmt,
+};
+use petgraph::graph::NodeIndex;
+use petgraph::Graph;
 
 #[derive(Hash, PartialEq, Eq, Clone, Copy, Debug, Serialize)]
 pub struct Qubit(usize);
@@ -12,7 +19,7 @@ impl Qubit {
     }
 }
 
-#[derive(Hash, PartialEq, Eq, Clone, Copy, Debug, Default, Serialize)]
+#[derive(Hash, PartialEq, Eq, Clone, Copy, Debug, Default, Serialize, Deserialize)]
 pub struct Location(usize);
 
 pub type QubitMap = HashMap<Qubit, Location>;
@@ -26,7 +33,7 @@ impl Location {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize)]
 pub enum GateType {
     CX,
     T,
@@ -36,26 +43,15 @@ impl fmt::Display for GateType {
         match self {
             GateType::CX => write!(f, "CX"),
             GateType::T => write!(f, "T"),
-            
         }
     }
 }
 
-
-
-#[derive(Clone, Debug, Eq, Hash)]
+#[derive(Clone, Debug, Eq, Hash, Serialize)]
 pub struct Gate {
-    pub gate_type : GateType,
+    pub gate_type: GateType,
     pub qubits: Vec<Qubit>,
     pub id: usize,
-}
-impl Serialize for Gate {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        serializer.serialize_str(&format!("{:?} {:?}", self.gate_type, self.qubits))
-    }
 }
 
 #[derive(Clone, Debug)]
@@ -87,8 +83,8 @@ impl Circuit {
     pub fn remove_gates(&mut self, gates: &Vec<Gate>) {
         self.gates.retain(|g| !gates.contains(g));
     }
-    pub fn reversed(&self)-> Circuit {
-        let mut copy =  self.clone();
+    pub fn reversed(&self) -> Circuit {
+        let mut copy = self.clone();
         copy.gates.reverse();
         return copy;
     }
@@ -104,12 +100,12 @@ pub fn circuit_from_gates(gates: Vec<Gate>) -> Circuit {
     return Circuit { gates, qubits };
 }
 
-pub trait GateImplementation {}
+pub trait GateImplementation: Clone + Serialize + Hash + Eq {}
 
 #[derive(Clone, Debug, Serialize)]
 pub struct Step<T: GateImplementation> {
     pub map: QubitMap,
-    pub implementation: HashMap<Gate, T>,
+    pub implemented_gates: HashSet<ImplementedGate<T>>,
 }
 
 impl<G: GateImplementation> Step<G> {
@@ -119,20 +115,35 @@ impl<G: GateImplementation> Step<G> {
         arch: &A,
         implement_gate: impl Fn(&Step<G>, &A, &Gate) -> Option<G>,
     ) {
-        assert!(self.implementation.is_empty());
+        assert!(self.implemented_gates.is_empty());
         for gate in executable {
             let implementation = implement_gate(self, arch, gate);
             match implementation {
                 None => continue,
                 Some(implementation) => {
-                    self.implementation.insert(gate.clone(), implementation);
+                    self.implemented_gates.insert(ImplementedGate {
+                        gate: gate.clone(),
+                        implementation,
+                    });
                 }
             }
         }
     }
 
     pub fn gates(&self) -> Vec<Gate> {
-        return self.implementation.keys().cloned().collect();
+        return self
+            .implemented_gates
+            .iter()
+            .map(|gi| gi.gate.clone())
+            .collect();
+    }
+
+    pub fn map(&self) -> &QubitMap {
+        return &self.map;
+    }
+
+    pub fn implemented_gates(&self) -> HashSet<ImplementedGate<G>> {
+        return self.implemented_gates.clone()
     }
 }
 
@@ -143,13 +154,20 @@ pub trait Transition<T: GateImplementation> {
 }
 
 pub trait Architecture {
-    fn get_locations(&self) -> Vec<Location>;
+    fn locations(&self) -> Vec<Location>;
+    fn graph(&self) -> (Graph<Location, ()>, HashMap<Location, NodeIndex>);
 }
 
-#[derive(Serialize, Debug)]
-pub struct CompilerResult<T : GateImplementation> {
-    pub steps : Vec<Step<T>>,
-    pub transitions : Vec<String>,
-    pub cost : f64,
+#[derive(Debug, Serialize, Clone, Hash, PartialEq, Eq)]
+pub struct ImplementedGate<T: GateImplementation> {
+    pub gate: Gate,
+    pub implementation: T,
+}
 
+
+#[derive(Debug, Serialize)]
+pub struct CompilerResult<T: GateImplementation> {
+    pub steps: Vec<Step<T>>,
+    pub transitions: Vec<String>,
+    pub cost: f64,
 }

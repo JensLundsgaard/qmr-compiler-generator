@@ -2,8 +2,7 @@ use qmrl::utils;
 include!(concat!(env!("OUT_DIR"), "/custom.rs"));
 fn run_custom(circ_path: &str, graph_path: &str, solve_mode: &str) {
     let circ = utils::extract_cnots(circ_path);
-    let g = utils::graph_from_file(graph_path);
-    let arch = MyArch::new(g);
+    let arch = CustomArch::from_file(graph_path);
     let res = match solve_mode {
         "--sabre" => my_sabre_solve(&circ, &arch),
         "--onepass" => my_solve(&circ, &arch),

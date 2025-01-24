@@ -1,4 +1,4 @@
-use qmrl::{nisq, raa, scmr, utils};
+use qmrl::{nisq, utils};
 
 fn run_nisq(circ_path: &str, graph_path: &str, solve_mode: &str) {
     let circ = utils::extract_cnots(circ_path);
@@ -18,7 +18,7 @@ fn run_nisq(circ_path: &str, graph_path: &str, solve_mode: &str) {
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     if args.len() != 4 {
-        println!("Usage: qmrl <circuit> <graph>");
+        println!("Usage: qmrl <circuit> <graph> <solve_mode>");
         return;
     }
     run_nisq(&args[1], &args[2], &args[3]);

@@ -1,0 +1,26 @@
+GateRealization[
+    name='ScmrGate'
+    data= (path : Vec<Location>)
+    realize_gate =  
+        if Arch.shortest_path(Arch.vertical_neighbors(Step.map[Gate.qubits[0]]), Arch.horizontal_neighbors(Step.map[Gate.qubits[1]]), Step.map.values().extend(Arch.magic_states).extend(fold(Vec(),  map(|g| -> g.implementation), Step.implemented_gates))) == None
+        then None
+        else Arch.shortest_path(Arch.vertical_neighbors(Step.map[Gate.qubits[0]]), Arch.horizontal_neighbors(Step.map[Gate.qubits[1]]), Step.map.values().extend(Arch.magic_states).extend(fold(Vec(),  |x, acc| -> acc.extend(x), map(|x| -> x.implementation, Step.implemented_gates))))
+        ]
+
+Transition[
+    name = "id"
+    data = na : Location
+    get_transitions = Vec().push(Transition{Location(0)})
+    apply = identity()
+    cost = 0.0
+
+]
+
+Arch[
+    data = (magic_states : Vec<Location>, alg_qubits : Vec<Location>)
+    get_locations = Arch.alg_qubits
+]
+
+Step[
+    cost = 1.0
+]

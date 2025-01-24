@@ -1,10 +1,10 @@
-use std::collections::HashMap;
-
+use std::collections::{HashMap, HashSet};
 
 use petgraph::{graph::NodeIndex, Graph};
+use serde::Serialize;
 
-use crate::{backend::solve, utils::*, structures::*};
-
+use crate::{backend::solve, structures::*, utils::*};
+#[derive(Debug, Serialize)]
 pub struct ScmrArchitecture {
     pub width: usize,
     pub height: usize,
@@ -13,8 +13,12 @@ pub struct ScmrArchitecture {
 }
 
 impl Architecture for ScmrArchitecture {
-    fn get_locations(&self) -> Vec<Location> {
+    fn locations(&self) -> Vec<Location> {
         return self.alg_qubits.clone();
+    }
+
+    fn graph(&self) -> (Graph<Location, ()>, HashMap<Location, NodeIndex>) {
+        return self.get_graph();
     }
 }
 impl ScmrArchitecture {
@@ -63,7 +67,7 @@ impl ScmrArchitecture {
         return (g, index_map);
     }
 }
-#[derive(Debug)]
+#[derive(Debug, Serialize, Clone, Hash, PartialEq, Eq)]
 pub struct ScmrGateImplementation {
     path: Vec<Location>,
 }
@@ -75,7 +79,7 @@ struct IdTransition;
 impl Transition<ScmrGateImplementation> for IdTransition {
     fn apply(&self, step: &ScmrStep) -> ScmrStep {
         return ScmrStep {
-            implementation: HashMap::new(),
+            implemented_gates: HashSet::new(),
             map: step.map.clone(),
         };
     }
@@ -116,9 +120,9 @@ fn scmr_implement_gate(
         loc_to_node.remove(loc);
     }
     for loc in step
-        .implementation
-        .values()
-        .map(|x| x.path.clone())
+        .implemented_gates
+        .iter()
+        .map(|x| x.implementation.path.clone())
         .flatten()
     {
         let old_last = graph[graph.node_indices().last().unwrap()];
@@ -127,21 +131,21 @@ fn scmr_implement_gate(
         loc_to_node.remove(&loc);
     }
     let (starts, ends) = match &gate.gate_type {
-       GateType::CX => {
-            let (cpos, tpos) = (&step.map[&gate.qubits[0]], &step.map[&gate.qubits[1]]);
+        GateType::CX => {
+            let (cpos, tpos) = (step.map[&gate.qubits[0]], step.map[&gate.qubits[1]]);
             (
                 vertical_neighbors(cpos, arch.width, arch.height),
                 horizontal_neighbors(tpos, arch.width),
             )
         }
         GateType::T => {
-            let pos = &step.map[&gate.qubits[0]];
+            let pos = step.map[&gate.qubits[0]];
             let target_neighbors = vertical_neighbors(pos, arch.width, arch.height);
             let msf_neighors = arch
                 .magic_state_qubits
                 .clone()
                 .into_iter()
-                .map(|m| horizontal_neighbors(&m, arch.width))
+                .map(|m| horizontal_neighbors(m, arch.width))
                 .flatten()
                 .collect();
             (target_neighbors, msf_neighors)

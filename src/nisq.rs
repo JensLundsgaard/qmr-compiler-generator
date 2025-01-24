@@ -1,10 +1,8 @@
-use crate::backend::{solve,sabre_solve};
-use crate::utils::*;
+use crate::backend::{sabre_solve, solve};
 use crate::structures::*;
 use petgraph::{graph::NodeIndex, Graph};
 use serde::Serialize;
-use std::collections::HashMap;
-
+use std::collections::{HashMap, HashSet};
 
 pub struct NisqArchitecture {
     graph: Graph<Location, ()>,
@@ -24,12 +22,15 @@ impl NisqArchitecture {
 }
 
 impl Architecture for NisqArchitecture {
-    fn get_locations(&self) -> Vec<Location> {
+    fn locations(&self) -> Vec<Location> {
         let mut locations = Vec::new();
         for node in self.graph.node_indices() {
             locations.push(self.graph[node]);
         }
         return locations;
+    }
+    fn graph(&self) -> (Graph<Location, ()>, HashMap<Location, NodeIndex>) {
+        return (self.graph.clone(), self.index_map.clone());
     }
 }
 
@@ -51,7 +52,7 @@ fn swap_on_edge(
 struct NisqTrans {
     edge: (Location, Location),
 }
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, Hash, PartialEq, Eq)]
 pub struct NisqGateImplementation {
     edge: (Location, Location),
 }
@@ -64,7 +65,7 @@ impl Transition<NisqGateImplementation> for NisqTrans {
     fn apply(&self, step: &NisqStep) -> NisqStep {
         let mut new_step = step.clone();
         new_step.map = swap_on_edge(&step.map, self.edge);
-        new_step.implementation = HashMap::new();
+        new_step.implemented_gates = HashSet::new();
         return new_step;
     }
     fn repr(&self) -> String {
@@ -92,27 +93,6 @@ fn nisq_transitions(arch: &NisqArchitecture) -> Vec<NisqTrans> {
         transitions.push(trans);
     }
     return transitions;
-}
-
-fn nisq_step_valid(step: &NisqStep, arch: &NisqArchitecture) -> bool {
-    let graph = arch.get_graph();
-    for gate in &step.gates() {
-        let (cpos, tpos) = (step.map.get(&gate.qubits[0]), step.map.get(&gate.qubits[1]));
-        match cpos {
-            Some(cpos) => match tpos {
-                Some(tpos) => {
-                    if !(graph.contains_edge(arch.index_map[cpos], arch.index_map[tpos])
-                        || graph.contains_edge(arch.index_map[tpos], arch.index_map[cpos]))
-                    {
-                        return false;
-                    }
-                }
-                None => return false,
-            },
-            None => return false,
-        }
-    }
-    return true;
 }
 
 fn nisq_implement_gate(
@@ -152,13 +132,19 @@ fn mapping_heuristic(arch: &NisqArchitecture, c: &Circuit, map: &HashMap<Qubit, 
         let sp_res = petgraph::algo::astar(graph, cind, |n| n == tind, |_| 1, |_| 1);
         match sp_res {
             Some((c, _)) => cost += c,
-            None => panic!("Disconnected graph. No path found from {:?} to {:?}", cpos, tpos)
+            None => panic!(
+                "Disconnected graph. No path found from {:?} to {:?}",
+                cpos, tpos
+            ),
         }
     }
     return cost as f64;
 }
 
-pub fn nisq_solve_sabre(c: &Circuit, a: &NisqArchitecture) -> CompilerResult<NisqGateImplementation> {
+pub fn nisq_solve_sabre(
+    c: &Circuit,
+    a: &NisqArchitecture,
+) -> CompilerResult<NisqGateImplementation> {
     return sabre_solve(
         c,
         a,

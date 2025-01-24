@@ -1,4 +1,6 @@
-use crate::{backend::solve, utils::*, structures::*};
+use serde::Serialize;
+
+use crate::{backend::solve, structures::*};
 use std::collections::{HashMap, HashSet};
 
 const ACCELERATION_CONST: f64 = 2750.0;
@@ -12,7 +14,7 @@ pub struct RaaArchitecture {
 }
 
 impl Architecture for RaaArchitecture {
-    fn get_locations(&self) -> Vec<Location> {
+    fn locations(&self) -> Vec<Location> {
         let mut locations = Vec::new();
         for i in 0..self.width {
             for j in 0..self.height {
@@ -22,9 +24,59 @@ impl Architecture for RaaArchitecture {
         }
         return locations;
     }
+
+    fn graph(
+        &self,
+    ) -> (
+        petgraph::Graph<Location, ()>,
+        HashMap<Location, petgraph::prelude::NodeIndex>,
+    ) {
+        let mut g = petgraph::Graph::new();
+        let mut index_map = HashMap::new();
+        for i in 0..self.width {
+            for j in 0..self.height {
+                let loc = Location::new(i * self.height + j);
+                let v = g.add_node(loc);
+                index_map.insert(loc, v);
+            }
+        }
+        for i in 0..self.width {
+            for j in 0..self.height {
+                // edge to above
+                if i > 0 {
+                    let v1 = index_map[&Location::new(i * self.height + j)];
+                    let v2 = index_map[&Location::new((i - 1) * self.height + j)];
+                    g.add_edge(v1, v2, ());
+                    g.add_edge(v2, v1, ());
+                }
+                // edge to below
+                if i < self.width - 1 {
+                    let v1 = index_map[&Location::new(i * self.height + j)];
+                    let v2 = index_map[&Location::new((i + 1) * self.height + j)];
+                    g.add_edge(v1, v2, ());
+                    g.add_edge(v2, v1, ());
+                }
+                // edge to left
+                if j > 0 {
+                    let v1 = index_map[&Location::new(i * self.height + j)];
+                    let v2 = index_map[&Location::new(i * self.height + j - 1)];
+                    g.add_edge(v1, v2, ());
+                    g.add_edge(v2, v1, ());
+                }
+                // edge to right
+                if j < self.height - 1 {
+                    let v1 = index_map[&Location::new(i * self.height + j)];
+                    let v2 = index_map[&Location::new(i * self.height + j + 1)];
+                    g.add_edge(v1, v2, ());
+                    g.add_edge(v2, v1, ());
+                }
+            }
+        }
+        return (g, index_map);
+    }
 }
 struct IdTransition;
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, PartialEq, Eq, Hash)]
 pub struct RaaGateImplementation {
     src: Location,
     dst: Location,
@@ -37,7 +89,7 @@ type RaaStep = Step<RaaGateImplementation>;
 impl Transition<RaaGateImplementation> for IdTransition {
     fn apply(&self, step: &RaaStep) -> RaaStep {
         return RaaStep {
-            implementation: HashMap::new(),
+            implemented_gates: HashSet::new(),
             map: step.map.clone(),
         };
     }
@@ -64,7 +116,7 @@ impl Transition<RaaGateImplementation> for RaaMove {
     fn apply(&self, step: &RaaStep) -> RaaStep {
         let mut new_step = step.clone();
         new_step.map.insert(self.qubit, self.dst);
-        new_step.implementation = HashMap::new();
+        new_step.implemented_gates = HashSet::new();
         return new_step;
     }
     fn repr(&self) -> String {
@@ -78,7 +130,10 @@ impl Transition<RaaGateImplementation> for RaaMove {
 
 fn raa_transitions_dyn_map(step: &RaaStep, arch: &RaaArchitecture) -> Vec<RaaMove> {
     let mut moves = Vec::new();
-    let impls = step.implementation.values();
+    let impls = step
+        .implemented_gates
+        .iter()
+        .map(|gi| gi.implementation.clone());
     for raa_move in impls {
         let aod_qubit = step
             .map
@@ -92,7 +147,7 @@ fn raa_transitions_dyn_map(step: &RaaStep, arch: &RaaArchitecture) -> Vec<RaaMov
             .find(|(_q, l)| *l == &raa_move.dst)
             .unwrap()
             .0;
-        for dst in arch.get_locations() {
+        for dst in arch.locations() {
             if !(step.map.values().any(|v| v == &dst && v != &raa_move.src)) {
                 let src_coords = (
                     step.map.get(slm_qubit).unwrap().get_index() / arch.height,
@@ -197,15 +252,15 @@ fn raa_implement_gate(
     );
     let mut row_displacements: HashMap<usize, usize> = HashMap::new();
     let mut col_displacements: HashMap<usize, usize> = HashMap::new();
-    let existing_moves = step.implementation.values().map(|raa_move| {
+    let existing_moves = step.implemented_gates.iter().map(|g| {
         (
             (
-                raa_move.src.get_index() / arch.height,
-                raa_move.src.get_index() % arch.height,
+                g.implementation.src.get_index() / arch.height,
+                g.implementation.src.get_index() % arch.height,
             ),
             (
-                raa_move.dst.get_index() / arch.height,
-                raa_move.dst.get_index() % arch.height,
+                g.implementation.dst.get_index() / arch.height,
+                g.implementation.dst.get_index() % arch.height,
             ),
         )
     });
@@ -266,7 +321,7 @@ fn raa_step_cost(step: &RaaStep, arch: &RaaArchitecture) -> f64 {
     return cost;
 }
 
-pub fn raa_solve(c: &Circuit, arch: &RaaArchitecture) -> CompilerResult<RaaGateImplementation>{
+pub fn raa_solve(c: &Circuit, arch: &RaaArchitecture) -> CompilerResult<RaaGateImplementation> {
     solve(
         c,
         arch,

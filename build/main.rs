@@ -5,7 +5,6 @@ use std::{env, path::Path, vec};
 
 use ast::*;
 use emit::write_to_file;
-use syn::Data;
 
 fn test_program() -> ProblemDefinition {
     ProblemDefinition {
@@ -54,7 +53,7 @@ fn test_program() -> ProblemDefinition {
                         Expr::MapAccess(Box::new(Expr::GetData {
                             d: DataType::Gate,
                             access: AccessExpr::ArrayAccess(
-                               "qubits".to_string(),
+                                "qubits".to_string(),
                                 Box::new(Expr::IndexLiteral(1)),
                             ),
                         })),
@@ -108,6 +107,7 @@ fn test_program() -> ProblemDefinition {
                         method: "edges".to_string(),
                         args: vec![],
                     }),
+                    bound_var: "x".to_string(),
                     func: Box::new(Expr::TransitionConstructor(vec![(
                         "edge".to_string(),
                         Expr::Ident("x".to_string()),
@@ -120,20 +120,20 @@ fn test_program() -> ProblemDefinition {
             },
         },
         arch: None,
+        step: None,
     }
 }
 
-
-fn from_file(){
+fn from_file() {
     let path = env::var("QMRL_PATH").unwrap_or("nisq.qmrl".to_string());
     let p = parse::read_file(&path);
+    let ast = format!("{:?}", p);
+    let _ = std::fs::write("debug", ast.as_bytes());
     let out_dir = env::var_os("OUT_DIR").unwrap();
     let dest_path = Path::new(&out_dir).join("custom.rs");
     write_to_file(p, dest_path.to_str().unwrap());
-
 }
 
 fn main() {
     from_file();
-    }
-    
+}

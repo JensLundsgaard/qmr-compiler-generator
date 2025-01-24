@@ -1,7 +1,8 @@
 use rand::seq::SliceRandom;
 
-use crate::utils::*;
 use crate::structures::*;
+use crate::utils::*;
+use std::collections::HashSet;
 use std::{collections::HashMap, fmt::Debug};
 const ALPHA: f64 = 1.0;
 const BETA: f64 = 1.0;
@@ -11,7 +12,7 @@ const SABRE_ITERATIONS: usize = 3;
 fn random_map<T: Architecture>(c: &Circuit, arch: &T) -> QubitMap {
     let mut map = HashMap::new();
     let mut rng = &mut rand::thread_rng();
-    let locations = arch.get_locations();
+    let locations = arch.locations();
     let v = locations.choose_multiple(&mut rng, c.qubits.len());
     for (q, l) in c.qubits.iter().zip(v) {
         map.insert(*q, *l);
@@ -71,7 +72,7 @@ fn random_neighbor<T: Architecture>(map: &QubitMap, arch: &T) -> QubitMap {
         }
     }
     for q in map.keys() {
-        for l in arch.get_locations() {
+        for l in arch.locations() {
             if !map.values().any(|x| *x == l) {
                 let l = l.clone();
                 let into_open = move |m: &QubitMap| {
@@ -111,7 +112,7 @@ fn route<A: Architecture, R: Transition<G> + Debug, G: GateImplementation + Debu
     arch: &A,
     map: QubitMap,
     transitions: &impl Fn(&Step<G>) -> Vec<R>,
-    implement_gate:  impl Fn(&Step<G>, &A, &Gate) -> Option<G>,
+    implement_gate: impl Fn(&Step<G>, &A, &Gate) -> Option<G>,
     step_cost: fn(&Step<G>, &A) -> f64,
     map_eval: &impl Fn(&Circuit, &QubitMap) -> f64,
 ) -> CompilerResult<G> {
@@ -119,7 +120,7 @@ fn route<A: Architecture, R: Transition<G> + Debug, G: GateImplementation + Debu
     let mut trans_taken = Vec::new();
     let mut step_0 = Step {
         map,
-        implementation: HashMap::new(),
+        implemented_gates: HashSet::new(),
     };
     let mut current_circ = c.clone();
     let mut cost = step_cost(&step_0, arch);
