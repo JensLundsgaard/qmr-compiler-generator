@@ -1,0 +1,7 @@
+[workspace]
+
+members = [
+    "solver",
+    "generator"
+, "builtin"]
+resolver = "2"

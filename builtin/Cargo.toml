@@ -1,0 +1,9 @@
+[package]
+name = "builtin"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+petgraph = "0.7.1"
+serde = "1.0.217"
+solver = { path = "../solver" }
