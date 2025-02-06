@@ -23,13 +23,13 @@ fn raa_test() {
 }
 
 fn scmr_test() {
-    let circ = utils::extract_scmr_gates("/home/abtin/qmrsl/3_17_13.qasm");
+    let circ = utils::extract_scmr_gates("/home/abtin/qmrsl/circuits/3_17_13.qasm");
     let arch = scmr::compact_layout(circ.qubits.len());
-    println!("{:?}", scmr::scmr_solve(&circ, &arch));
+    println!("{:?}", scmr::scmr_solve(&circ, &arch).cost);
 }
 
 fn main() {
-    nisq_test();
-    raa_test();
+    // nisq_test();
+    // raa_test();
     scmr_test();
 }

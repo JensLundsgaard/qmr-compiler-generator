@@ -1,8 +1,10 @@
 use itertools::Itertools;
 use petgraph::graph::NodeIndex;
 use petgraph::Graph;
+use rand::seq::IndexedRandom;
 use serde::Deserialize;
 use serde::Serialize;
+use std::fmt::Debug;
 use std::hash::Hash;
 use std::{
     collections::{HashMap, HashSet},
@@ -101,7 +103,7 @@ pub fn circuit_from_gates(gates: Vec<Gate>) -> Circuit {
     return Circuit { gates, qubits };
 }
 
-pub trait GateImplementation: Clone + Serialize + Hash + Eq {}
+pub trait GateImplementation: Clone + Serialize + Hash + Eq + Debug {}
 
 #[derive(Clone, Debug, Serialize)]
 pub struct Step<T: GateImplementation> {
@@ -138,10 +140,7 @@ impl<G: GateImplementation> Step<G> {
         implement_gate: impl Fn(&Step<G>, &A, &Gate) -> Option<G>,
     ) {
         assert!(self.implemented_gates.is_empty());
-        let orders= executable
-            .iter()
-            .cloned()
-            .permutations(executable.len());
+        let orders = executable.iter().cloned().permutations(executable.len());
         for order in orders {
             let mut step = Step {
                 map: self.map.clone(),
@@ -157,6 +156,30 @@ impl<G: GateImplementation> Step<G> {
         }
     }
 
+    pub fn max_step_all_implementations<A: Architecture, I : IntoIterator<Item = G>>(
+        &mut self,
+        executable: &Vec<Gate>,
+        arch: &A,
+        implement_gate: impl Fn(&Step<G>, &A, &Gate) -> I,
+    ) {
+        assert!(self.implemented_gates.is_empty());
+        let orders = executable.iter().cloned().permutations(executable.len());
+        for order in orders{
+            for gate in order {
+                let mut seen = HashSet::new();
+                println!("{:?}", gate);
+                for implementation in implement_gate(self, arch, &gate).into_iter() {
+                    let seen = seen.insert(implementation.clone());
+                    assert!(seen);
+                    self.implemented_gates = HashSet::new(); 
+                    self.implemented_gates.insert(ImplementedGate {
+                        gate: gate.clone(),
+                        implementation,
+                    });
+                }
+            }
+        }
+}
     pub fn gates(&self) -> Vec<Gate> {
         return self
             .implemented_gates

@@ -1,10 +1,10 @@
-use std::collections::{HashMap, HashSet};
+use std::{collections::{HashMap, HashSet}, iter::empty};
 
-use petgraph::{graph::NodeIndex, Graph};
+use petgraph::{algo::all_simple_paths, graph::NodeIndex, Graph};
 use serde::Serialize;
 
 use solver::{backend::solve, structures::*, utils::*};
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Clone)]
 pub struct ScmrArchitecture {
     pub width: usize,
     pub height: usize,
@@ -38,29 +38,29 @@ impl ScmrArchitecture {
                 if i > 0 {
                     let v1 = index_map[&Location::new(i * self.width + j)];
                     let v2 = index_map[&Location::new((i - 1) * self.width + j)];
-                    g.add_edge(v1, v2, ());
-                    g.add_edge(v2, v1, ());
+                    g.update_edge(v1, v2, ());
+                    g.update_edge(v2, v1, ());
                 }
                 // edge to below
                 if i < self.height - 1 {
                     let v1 = index_map[&Location::new(i * self.width + j)];
                     let v2 = index_map[&Location::new((i + 1) * self.width + j)];
                     g.add_edge(v1, v2, ());
-                    g.add_edge(v2, v1, ());
+                    g.update_edge(v2, v1, ());
                 }
                 // edge to left
                 if j > 0 {
                     let v1 = index_map[&Location::new(i * self.width + j)];
                     let v2 = index_map[&Location::new(i * self.width + j - 1)];
-                    g.add_edge(v1, v2, ());
-                    g.add_edge(v2, v1, ());
+                    g.update_edge(v1, v2, ());
+                    g.update_edge(v2, v1, ());
                 }
                 // edge to right
                 if j < self.width - 1 {
                     let v1 = index_map[&Location::new(i * self.width + j)];
                     let v2 = index_map[&Location::new(i * self.width + j + 1)];
-                    g.add_edge(v1, v2, ());
-                    g.add_edge(v2, v1, ());
+                    g.update_edge(v1, v2, ());
+                    g.update_edge(v2, v1, ());
                 }
             }
         }
@@ -136,7 +136,7 @@ fn scmr_implement_gate(
     step: &ScmrStep,
     arch: &ScmrArchitecture,
     gate: &Gate,
-) -> Option<ScmrGateImplementation> {
+) -> Vec<ScmrGateImplementation> {
     let (mut graph, mut loc_to_node) = arch.get_graph();
     for loc in &arch.magic_state_qubits {
         assert!(!arch.alg_qubits.clone().into_iter().any(|l| l == *loc));
@@ -183,37 +183,72 @@ fn scmr_implement_gate(
             (target_neighbors, msf_neighors)
         }
     };
-    let mut best: Option<(i32, Vec<NodeIndex>)> = None;
+    let mut paths:  Vec<Vec<NodeIndex>> = Vec::new();
 
     for start in &starts {
         for end in &ends {
             if loc_to_node.contains_key(start) && loc_to_node.contains_key(end) {
-                let res = petgraph::algo::astar(
+                let res: Vec<Vec<NodeIndex>> = petgraph::algo::all_simple_paths(
                     &graph,
                     loc_to_node[&start],
-                    |finish| finish == loc_to_node[&end],
-                    |_e| 1,
-                    |_| 0,
-                );
-                if best.is_none()
-                    || ((&res).is_some() && &res.as_ref().unwrap().0 < &best.as_ref().unwrap().0)
-                {
-                    best = res;
-                }
+                    loc_to_node[&end],
+                    0,
+                    None,
+                ).collect();
+                paths.extend(res);
             }
         }
     }
-    return best.map(|(_cost, path)| ScmrGateImplementation {
-        path: path.into_iter().map(|n| graph[n]).collect(),
-    });
+return paths.into_iter().map(|path| ScmrGateImplementation { path: path.into_iter().map(|x| graph[x]).collect() }).collect();
+
 }
+
+fn scmr_implement_gate_alt(
+    step: &ScmrStep,
+    arch: &ScmrArchitecture,
+    gate: &Gate,
+) -> impl Iterator<Item = ScmrGateImplementation> {
+    let paths: Vec<_> = step
+        .implemented_gates
+        .iter()
+        .map(|x| x.implementation.path.clone())
+        .flatten()
+        .collect();
+    let mapped: Vec<_> = step.map.values().cloned().collect();
+    let magic_states = arch.magic_state_qubits.clone();
+    let blocked  = mapped.into_iter().chain(magic_states.into_iter()).chain(paths.into_iter()).collect();
+    let (starts, ends) = match &gate.gate_type {
+        GateType::CX => {
+            let (cpos, tpos) = (step.map[&gate.qubits[0]], step.map[&gate.qubits[1]]);
+            (
+                vertical_neighbors(cpos, arch.width, arch.height),
+                horizontal_neighbors(tpos, arch.width),
+            )
+        }
+        GateType::T => {
+            let pos = step.map[&gate.qubits[0]];
+            let target_neighbors = vertical_neighbors(pos, arch.width, arch.height);
+            let msf_neighors = arch
+                .magic_state_qubits
+                .clone()
+                .into_iter()
+                .map(|m| horizontal_neighbors(m, arch.width))
+                .flatten()
+                .collect();
+            (target_neighbors, msf_neighors)
+        }
+    };
+    all_paths(arch.clone(), starts, ends, blocked).map(|p| ScmrGateImplementation{path: p})
+
+}
+
 
 pub fn scmr_solve(c: &Circuit, a: &ScmrArchitecture) -> CompilerResult<ScmrGateImplementation> {
     return solve(
         c,
         a,
         &scmr_transitions,
-        scmr_implement_gate,
+        scmr_implement_gate_alt,
         scmr_step_cost,
         None,
         true

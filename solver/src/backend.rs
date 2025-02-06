@@ -1,5 +1,3 @@
-
-
 use rand::seq::IndexedRandom;
 
 use crate::structures::*;
@@ -11,6 +9,7 @@ const BETA: f64 = 1.0;
 const GAMMA: f64 = 1.0;
 const DELTA: f64 = 1.0;
 const SABRE_ITERATIONS: usize = 3;
+
 fn random_map<T: Architecture>(c: &Circuit, arch: &T) -> QubitMap {
     let mut map = HashMap::new();
     let mut rng = &mut rand::rng();
@@ -109,15 +108,15 @@ fn sim_anneal_mapping_search<T: Architecture>(
     );
 }
 
-fn route<A: Architecture, R: Transition<G> + Debug, G: GateImplementation + Debug>(
+fn route<A: Architecture, R: Transition<G> + Debug, G: GateImplementation + Debug, I : IntoIterator<Item=G>>(
     c: &Circuit,
     arch: &A,
     map: QubitMap,
     transitions: &impl Fn(&Step<G>) -> Vec<R>,
-    implement_gate: impl Fn(&Step<G>, &A, &Gate) -> Option<G>,
+    implement_gate: impl Fn(&Step<G>, &A, &Gate) -> I,
     step_cost: fn(&Step<G>, &A) -> f64,
     map_eval: &impl Fn(&Circuit, &QubitMap) -> f64,
-    explore_routing_orders : bool
+    explore_routing_orders: bool,
 ) -> CompilerResult<G> {
     let mut steps = Vec::new();
     let mut trans_taken = Vec::new();
@@ -128,11 +127,7 @@ fn route<A: Architecture, R: Transition<G> + Debug, G: GateImplementation + Debu
     let mut current_circ = c.clone();
     let mut cost = step_cost(&step_0, arch);
     let executable = &c.get_front_layer();
-    if explore_routing_orders {
-        step_0.max_step_all_orders(executable, arch, &implement_gate);
-    } else {
-    step_0.max_step(executable, arch, &implement_gate);
-    }
+    step_0.max_step_all_implementations(executable, arch, &implement_gate);
     current_circ.remove_gates(&(step_0.gates()));
     steps.push(step_0);
     while current_circ.gates.len() > 0 {
@@ -144,7 +139,7 @@ fn route<A: Architecture, R: Transition<G> + Debug, G: GateImplementation + Debu
             steps.last().unwrap(),
             step_cost,
             &map_eval,
-            explore_routing_orders
+            explore_routing_orders,
         );
         match best {
             Some((s, trans, _b)) => {
@@ -166,25 +161,21 @@ fn route<A: Architecture, R: Transition<G> + Debug, G: GateImplementation + Debu
     };
 }
 
-fn find_best_next_step<A: Architecture, R: Transition<G>, G: GateImplementation>(
+fn find_best_next_step<A: Architecture, R: Transition<G>, G: GateImplementation, I : IntoIterator<Item = G>>(
     c: &Circuit,
     arch: &A,
     transitions: &impl Fn(&Step<G>) -> Vec<R>,
-    implement_gate: impl Fn(&Step<G>, &A, &Gate) -> Option<G>,
+    implement_gate: impl Fn(&Step<G>, &A, &Gate) -> I,
     last_step: &Step<G>,
     step_cost: fn(&Step<G>, &A) -> f64,
     map_eval: impl Fn(&Circuit, &QubitMap) -> f64,
-    explore_routing_orders : bool
+    explore_routing_orders: bool,
 ) -> Option<(Step<G>, R, f64)> {
     let mut best: Option<(Step<G>, R, f64)> = None;
     for trans in transitions(last_step) {
         let mut next_step = trans.apply(last_step);
         let executable = c.get_front_layer();
-        if explore_routing_orders {
-            next_step.max_step_all_orders(&executable, arch, &implement_gate);
-        } else {
-        next_step.max_step(&executable, arch, &implement_gate);
-        }
+        next_step.max_step_all_implementations(&executable, arch, &implement_gate);
         let s_cost = step_cost(&next_step, arch);
         let t_cost = trans.cost();
         let m_cost = map_eval(&circuit_from_gates(executable), &next_step.map);
@@ -207,14 +198,14 @@ fn find_best_next_step<A: Architecture, R: Transition<G>, G: GateImplementation>
     return best;
 }
 
-pub fn solve<A: Architecture, R: Transition<G> + Debug, G: GateImplementation + Debug>(
+pub fn solve<A: Architecture, R: Transition<G> + Debug, G: GateImplementation + Debug, I : IntoIterator<Item = G>>(
     c: &Circuit,
     arch: &A,
     transitions: &impl Fn(&Step<G>) -> Vec<R>,
-    implement_gate: fn(&Step<G>, &A, &Gate) -> Option<G>,
+    implement_gate: fn(&Step<G>, &A, &Gate) -> I,
     step_cost: fn(&Step<G>, &A) -> f64,
     mapping_heuristic: Option<fn(&A, &Circuit, &QubitMap) -> f64>,
-    explore_routing_orders : bool
+    explore_routing_orders: bool,
 ) -> CompilerResult<G> {
     match mapping_heuristic {
         Some(heuristic) => {
@@ -230,7 +221,7 @@ pub fn solve<A: Architecture, R: Transition<G> + Debug, G: GateImplementation + 
                 implement_gate,
                 step_cost,
                 &route_h,
-                explore_routing_orders
+                explore_routing_orders,
             );
         }
         None => {
@@ -243,7 +234,7 @@ pub fn solve<A: Architecture, R: Transition<G> + Debug, G: GateImplementation + 
                 implement_gate,
                 step_cost,
                 &|_c, _m| 0.0,
-                explore_routing_orders
+                explore_routing_orders,
             );
         }
     }
@@ -253,10 +244,10 @@ pub fn sabre_solve<A: Architecture, R: Transition<G> + Debug, G: GateImplementat
     c: &Circuit,
     arch: &A,
     transitions: &impl Fn(&Step<G>) -> Vec<R>,
-    implement_gate: impl Fn(&Step<G>, &A, &Gate) -> Option<G>,
+    implement_gate: impl Fn(&Step<G>, &A, &Gate) -> Vec<G>,
     step_cost: fn(&Step<G>, &A) -> f64,
     mapping_heuristic: Option<fn(&A, &Circuit, &QubitMap) -> f64>,
-    explore_routing_orders : bool
+    explore_routing_orders: bool,
 ) -> CompilerResult<G> {
     let mut map = match mapping_heuristic {
         Some(heuristic) => {
@@ -282,9 +273,7 @@ pub fn sabre_solve<A: Architecture, R: Transition<G> + Debug, G: GateImplementat
                 &implement_gate,
                 step_cost,
                 &route_h,
-
-                explore_routing_orders
-
+                explore_routing_orders,
             );
             map = res.steps.last().unwrap().map.clone();
         }
@@ -297,8 +286,6 @@ pub fn sabre_solve<A: Architecture, R: Transition<G> + Debug, G: GateImplementat
         &implement_gate,
         step_cost,
         &route_h,
-        explore_routing_orders
+        explore_routing_orders,
     );
 }
-
-

@@ -241,7 +241,7 @@ fn raa_implement_gate(
     step: &RaaStep,
     arch: &RaaArchitecture,
     gate: &Gate,
-) -> Option<RaaGateImplementation> {
+) -> Vec<RaaGateImplementation> {
     let ctrl_coords = (
         step.map[&gate.qubits[0]].get_index() / arch.height,
         step.map[&gate.qubits[0]].get_index() % arch.height,
@@ -271,19 +271,19 @@ fn raa_implement_gate(
 
     let move_ctrl_to_tar = (ctrl_coords, tar_coords);
     let move_tar_to_ctrl = (tar_coords, ctrl_coords);
+    let mut v = Vec::new();
     if consistent(move_ctrl_to_tar, &row_displacements, &col_displacements) {
-        return Some(RaaGateImplementation {
+        v.push(RaaGateImplementation {
             src: step.map[&gate.qubits[0]],
             dst: step.map[&gate.qubits[1]],
         });
     } else if consistent(move_tar_to_ctrl, &row_displacements, &col_displacements) {
-        return Some(RaaGateImplementation {
+        v.push(RaaGateImplementation {
             src: step.map[&gate.qubits[1]],
             dst: step.map[&gate.qubits[0]],
         });
-    } else {
-        return None;
     }
+    return v;
 }
 
 fn raa_step_cost(step: &RaaStep, arch: &RaaArchitecture) -> f64 {

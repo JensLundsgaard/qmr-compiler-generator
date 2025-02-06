@@ -1,11 +1,14 @@
 use crate::structures::*;
-use petgraph::graph::NodeIndex;
-use petgraph::Graph;
+use core::arch;
+use petgraph::graph::{Node, NodeIndex};
+use petgraph::Direction::Outgoing;
+use petgraph::{visit, Graph};
 use regex::Regex;
 use serde_json::Value;
 use std::collections::{HashMap, HashSet};
 use std::fs::File;
 use std::io::{self, BufRead};
+use std::iter::from_fn;
 
 pub fn extract_cnots(filename: &str) -> Circuit {
     let file = File::open(filename).unwrap();
@@ -312,4 +315,75 @@ pub fn identity_application<T: GateImplementation>(step: &Step<T>) -> Step<T> {
         implemented_gates: HashSet::new(),
         map: step.map.clone(),
     };
+}
+pub fn all_paths<A: Architecture>(
+    arch: A,
+    starts: Vec<Location>,
+    ends: Vec<Location>,
+    blocked: Vec<Location>,
+) -> impl Iterator<Item = Vec<Location>> {
+    let (mut graph, mut loc_to_node) = arch.graph();
+    let max_length = graph.node_count();
+    for loc in blocked.iter() {
+        let old_last = graph[graph.node_indices().last().unwrap()];
+        graph.remove_node(loc_to_node[loc]);
+        loc_to_node.insert(old_last, loc_to_node[loc]);
+        loc_to_node.remove(loc);
+    }
+
+    let unblocked_starts: Vec<_> = starts
+        .iter()
+        .filter(|x| loc_to_node.contains_key(x))
+        .cloned()
+        .collect();
+    let unblocked_ends: Vec<_> = ends
+        .iter()
+        .filter(|x| loc_to_node.contains_key(x))
+        .cloned()
+        .collect();
+    let mut visited = unblocked_starts.clone();
+    let mut stack: Vec<std::vec::IntoIter<NodeIndex>> = Vec::new();
+    let mut start_neighbors = Vec::new();
+    for start in unblocked_starts.iter() {
+        
+        println!("{:?}", graph.neighbors(loc_to_node[start]).collect::<Vec<_>>());
+        let neighbors: HashSet<_> = graph.neighbors_directed(loc_to_node[start], Outgoing).collect();
+        
+        start_neighbors.extend(neighbors);
+    }
+    stack.push(start_neighbors.into_iter());
+    
+    from_fn(move || {
+        while let Some(children) = stack.last_mut() {
+            if let Some(child) = children.next() {
+                let loc = graph[child];
+                if visited.len() < max_length {
+                    if ends.contains(&loc) {
+                        let path = visited.iter().chain(Some(&loc)).cloned().collect();
+                        
+                        return Some(path);
+                    } else if !visited.contains(&loc) {
+                        
+
+                        visited.push(loc);
+                        let neighbors: HashSet<_> = graph.neighbors_directed(child, Outgoing).collect();
+                        let n = neighbors.into_iter().collect::<Vec<_>>().into_iter();
+                        stack.push(n);
+                    }
+                } else {
+                    if ends.contains(&graph[child]) || children.any(|x| ends.contains(&graph[x])) {
+                        let path = visited.iter().chain(Some(&loc)).cloned().collect();
+                        return Some(path);
+                    }
+                    stack.pop();
+                    visited.pop();
+                }
+            } else {
+ 
+                stack.pop();
+                visited.pop();
+            }
+        }
+        None
+    })
 }

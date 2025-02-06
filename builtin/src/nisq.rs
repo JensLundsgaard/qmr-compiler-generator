@@ -1,7 +1,7 @@
-use solver::backend::{sabre_solve, solve};
-use solver::structures::*;
 use petgraph::{graph::NodeIndex, Graph};
 use serde::Serialize;
+use solver::backend::{sabre_solve, solve};
+use solver::structures::*;
 use std::collections::{HashMap, HashSet};
 
 pub struct NisqArchitecture {
@@ -99,23 +99,18 @@ fn nisq_implement_gate(
     step: &NisqStep,
     arch: &NisqArchitecture,
     gate: &Gate,
-) -> Option<NisqGateImplementation> {
+) -> Vec<NisqGateImplementation> {
     let graph = arch.get_graph();
     let (cpos, tpos) = (step.map.get(&gate.qubits[0]), step.map.get(&gate.qubits[1]));
-    match cpos {
-        Some(cpos) => match tpos {
-            Some(tpos) => {
-                if graph.contains_edge(arch.index_map[cpos], arch.index_map[tpos]) {
-                    return Some(NisqGateImplementation {
-                        edge: (*cpos, *tpos),
-                    });
-                } else {
-                    return None;
-                }
-            }
-            None => return None,
-        },
-        None => return None,
+    match (cpos, tpos) {
+        (Some(cpos), Some(tpos))
+            if graph.contains_edge(arch.index_map[cpos], arch.index_map[tpos]) =>
+        {
+            vec![NisqGateImplementation {
+                edge: (*cpos, *tpos),
+            }]
+        }
+        _ => vec![],
     }
 }
 
@@ -152,7 +147,7 @@ pub fn nisq_solve_sabre(
         nisq_implement_gate,
         nisq_step_cost,
         Some(mapping_heuristic),
-        false
+        false,
     );
 }
 
@@ -164,6 +159,6 @@ pub fn nisq_solve(c: &Circuit, a: &NisqArchitecture) -> CompilerResult<NisqGateI
         nisq_implement_gate,
         nisq_step_cost,
         Some(mapping_heuristic),
-        false
+        false,
     );
 }
