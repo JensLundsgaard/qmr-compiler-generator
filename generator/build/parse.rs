@@ -471,7 +471,7 @@ fn parser() -> impl Parser<char, ProblemDefinition, Error = Simple<char>> {
 }
 
 pub(crate) fn read_file(filename: &str) -> ProblemDefinition {
-    let src = std::fs::read_to_string(filename).expect("Failed to read file");
+    let src = std::fs::read_to_string(filename).expect("Reading qmrl file");
     println!("{:?}", parser().parse(src.clone()).unwrap());
     return parser()
         .parse(src)

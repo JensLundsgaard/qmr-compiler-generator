@@ -3,9 +3,6 @@ mod raa;
 mod scmr;
 use solver::utils;
 
-
-
-
 fn nisq_test() {
     let circ = utils::extract_cnots("/home/abtin/qmrsl/3_17_13.qasm");
     let g = utils::path_graph(10);

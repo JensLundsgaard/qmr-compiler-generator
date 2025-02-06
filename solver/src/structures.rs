@@ -1,7 +1,6 @@
 use itertools::Itertools;
 use petgraph::graph::NodeIndex;
 use petgraph::Graph;
-use rand::seq::IndexedRandom;
 use serde::Deserialize;
 use serde::Serialize;
 use std::fmt::Debug;
@@ -112,15 +111,15 @@ pub struct Step<T: GateImplementation> {
 }
 
 impl<G: GateImplementation> Step<G> {
-    pub fn max_step<A: Architecture>(
+    pub fn max_step<A: Architecture, I: IntoIterator<Item = G>>(
         &mut self,
         executable: &Vec<Gate>,
         arch: &A,
-        implement_gate: &impl Fn(&Step<G>, &A, &Gate) -> Option<G>,
+        implement_gate: &impl Fn(&Step<G>, &A, &Gate) -> I,
     ) {
         assert!(self.implemented_gates.is_empty());
         for gate in executable {
-            let implementation = implement_gate(self, arch, gate);
+            let implementation = implement_gate(self, arch, gate).into_iter().next();
             match implementation {
                 None => continue,
                 Some(implementation) => {
@@ -133,13 +132,15 @@ impl<G: GateImplementation> Step<G> {
         }
     }
 
-    pub fn max_step_all_orders<A: Architecture>(
+    pub fn max_step_all_orders<A: Architecture, I: IntoIterator<Item = G>>(
         &mut self,
         executable: &Vec<Gate>,
         arch: &A,
-        implement_gate: impl Fn(&Step<G>, &A, &Gate) -> Option<G>,
+        implement_gate: impl Fn(&Step<G>, &A, &Gate) -> I,
+        crit_table: &HashMap<usize, usize>,
     ) {
         assert!(self.implemented_gates.is_empty());
+        let mut best_total_criticality = 0;
         let orders = executable.iter().cloned().permutations(executable.len());
         for order in orders {
             let mut step = Step {
@@ -147,8 +148,12 @@ impl<G: GateImplementation> Step<G> {
                 implemented_gates: HashSet::new(),
             };
             step.max_step(&order, arch, &implement_gate);
-            if step.implemented_gates.len() > self.implemented_gates.len() {
+            let candidate_total_criticality: usize =
+                step.gates().into_iter().map(|x| crit_table[&x.id]).sum();
+
+            if candidate_total_criticality > best_total_criticality {
                 *self = step;
+                best_total_criticality = candidate_total_criticality;
             }
             if self.implemented_gates.len() == executable.len() {
                 return;
@@ -156,7 +161,7 @@ impl<G: GateImplementation> Step<G> {
         }
     }
 
-    pub fn max_step_all_implementations<A: Architecture, I : IntoIterator<Item = G>>(
+    pub fn max_step_all_implementations<A: Architecture, I: IntoIterator<Item = G>>(
         &mut self,
         executable: &Vec<Gate>,
         arch: &A,
@@ -164,22 +169,24 @@ impl<G: GateImplementation> Step<G> {
     ) {
         assert!(self.implemented_gates.is_empty());
         let orders = executable.iter().cloned().permutations(executable.len());
-        for order in orders{
+        for order in orders {
             for gate in order {
                 let mut seen = HashSet::new();
                 println!("{:?}", gate);
                 for implementation in implement_gate(self, arch, &gate).into_iter() {
                     let seen = seen.insert(implementation.clone());
+                    println!("{:?}", implementation);
                     assert!(seen);
-                    self.implemented_gates = HashSet::new(); 
-                    self.implemented_gates.insert(ImplementedGate {
-                        gate: gate.clone(),
-                        implementation,
-                    });
+                    if !self.gates().contains(&gate) {
+                        self.implemented_gates.insert(ImplementedGate {
+                            gate: gate.clone(),
+                            implementation,
+                        });
+                    }
                 }
             }
         }
-}
+    }
     pub fn gates(&self) -> Vec<Gate> {
         return self
             .implemented_gates

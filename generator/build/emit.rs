@@ -57,19 +57,25 @@ fn contains_subexpr(e: &Expr, subexpr: &Expr) -> bool {
         Expr::SwapPair(left, right) => {
             contains_subexpr(left, subexpr) || contains_subexpr(right, subexpr)
         }
-        Expr::GetData { d : _, access : _ } => false,
+        Expr::GetData { d: _, access: _ } => false,
         Expr::FloatLiteral(_) => false,
         Expr::ITE { cond, then, els } => {
             contains_subexpr(cond, subexpr)
                 || contains_subexpr(then, subexpr)
                 || contains_subexpr(els, subexpr)
         }
-        Expr::CallMethod { d : _, method : _, args } => {
-            args.iter().any(|arg| contains_subexpr(arg, subexpr))
+        Expr::CallMethod {
+            d: _,
+            method: _,
+            args,
+        } => args.iter().any(|arg| contains_subexpr(arg, subexpr)),
+        Expr::Append { vec, elem } => {
+            contains_subexpr(vec, subexpr) || contains_subexpr(elem, subexpr)
         }
-        Expr::Append { vec, elem } => contains_subexpr(vec, subexpr) || contains_subexpr(elem, subexpr),
         Expr::LocationLiteral(_) => false,
-        Expr::TransitionConstructor(vec) => vec.iter().any(|(_, expr)| contains_subexpr(expr, subexpr)),
+        Expr::TransitionConstructor(vec) => {
+            vec.iter().any(|(_, expr)| contains_subexpr(expr, subexpr))
+        }
         Expr::Tuple(vec) => vec.iter().any(|expr| contains_subexpr(expr, subexpr)),
         Expr::MapAccess(expr) => contains_subexpr(expr, subexpr),
         Expr::NoneExpr => false,
@@ -79,9 +85,13 @@ fn contains_subexpr(e: &Expr, subexpr: &Expr) -> bool {
             bound_var: _,
             func: f,
         } => contains_subexpr(c, subexpr) || contains_subexpr(f, subexpr),
-        Expr::ImplConstructorExpr(vec) => vec.iter().any(|(_, expr)| contains_subexpr(expr, subexpr)),
+        Expr::ImplConstructorExpr(vec) => {
+            vec.iter().any(|(_, expr)| contains_subexpr(expr, subexpr))
+        }
         Expr::Ident(_) => false,
-        Expr::Equal(expr, expr1) => contains_subexpr(expr, subexpr) || contains_subexpr(expr1, subexpr),
+        Expr::Equal(expr, expr1) => {
+            contains_subexpr(expr, subexpr) || contains_subexpr(expr1, subexpr)
+        }
         Expr::IndexLiteral(_) => false,
         Expr::EmptyVec => false,
         Expr::FoldExpr {
@@ -93,8 +103,12 @@ fn contains_subexpr(e: &Expr, subexpr: &Expr) -> bool {
                 || contains_subexpr(init, subexpr)
                 || contains_subexpr(func, subexpr)
         }
-        Expr::Extend { vec1, vec2 } => contains_subexpr(vec1, subexpr) || contains_subexpr(vec2, subexpr),
-        Expr::CallFunction { func : _, args } => args.iter().any(|arg| contains_subexpr(arg, subexpr)),
+        Expr::Extend { vec1, vec2 } => {
+            contains_subexpr(vec1, subexpr) || contains_subexpr(vec2, subexpr)
+        }
+        Expr::CallFunction { func: _, args } => {
+            args.iter().any(|arg| contains_subexpr(arg, subexpr))
+        }
         Expr::OptionMatch {
             expr,
             some_arm,
@@ -104,11 +118,12 @@ fn contains_subexpr(e: &Expr, subexpr: &Expr) -> bool {
                 || contains_subexpr(some_arm, subexpr)
                 || contains_subexpr(none_arm, subexpr)
         }
-        Expr::GetAnonData { ident : _, access : _ } => false,
+        Expr::GetAnonData {
+            ident: _,
+            access: _,
+        } => false,
     }
 }
-
-
 
 fn emit_define_struct(data: &NamedTuple) -> TokenStream {
     let struct_name = syn::Ident::new(&data.name, Span::call_site());
@@ -375,7 +390,7 @@ fn emit_realize_gate_function(imp: &ImplBlock) -> TokenStream {
             step: &Step<#imp_struct_name>,
             arch: &CustomArch,
             gate: &Gate,
-        ) -> Option<#imp_struct_name> {
+        ) -> impl IntoIterator<Item = #imp_struct_name> {
             #realize_gate_expr
         }
     }
@@ -431,7 +446,7 @@ fn emit_step_cost(p: &ProblemDefinition) -> TokenStream {
 }
 
 fn emit_solve_function(imp: &ImplBlock) -> TokenStream {
-    let sub_expr =  Expr::CallMethod {
+    let sub_expr = Expr::CallMethod {
         d: DataType::Step,
         method: "implemented_gates".to_string(),
         args: vec![],
@@ -446,7 +461,7 @@ fn emit_solve_function(imp: &ImplBlock) -> TokenStream {
 }
 
 fn emit_sabre_solve_function(imp: &ImplBlock) -> TokenStream {
-    let sub_expr =  Expr::CallMethod {
+    let sub_expr = Expr::CallMethod {
         d: DataType::Step,
         method: "implemented_gates".to_string(),
         args: vec![],
@@ -634,7 +649,7 @@ fn emit_expr(
                 emit_expr(c, context, &trans_struct_name, &imp_struct_name, bound_var);
             let emit_func = emit_expr(f, context, &trans_struct_name, &imp_struct_name, Some(bv));
             quote! {
-                #emit_container.iter().map(|x| #emit_func).collect::<Vec<_>>()
+                #emit_container.into_iter().map(|x| #emit_func)
             }
         }
         Expr::ImplConstructorExpr(vec) => {
@@ -653,7 +668,7 @@ fn emit_expr(
         Expr::Ident(s) => {
             let var_name = syn::Ident::new(s, Span::call_site());
             match bound_var {
-                Some(bv) if bv == s => quote! {*#var_name},
+                Some(bv) if bv == s => quote! {#var_name},
                 _ => quote! {#var_name},
             }
         }

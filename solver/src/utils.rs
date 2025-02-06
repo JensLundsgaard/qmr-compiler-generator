@@ -1,8 +1,9 @@
 use crate::structures::*;
-use core::arch;
-use petgraph::graph::{Node, NodeIndex};
+
+use itertools::max;
+use petgraph::graph::NodeIndex;
 use petgraph::Direction::Outgoing;
-use petgraph::{visit, Graph};
+use petgraph::Graph;
 use regex::Regex;
 use serde_json::Value;
 use std::collections::{HashMap, HashSet};
@@ -202,38 +203,6 @@ pub fn horizontal_neighbors(loc: Location, width: usize) -> Vec<Location> {
     return neighbors;
 }
 
-// pub fn compact_layout(alg_qubit_count: usize) -> ScmrArchitecture {
-//     let width = (2 * alg_qubit_count.div_ceil(2)) + 1;
-//     let height = 5;
-//     let mut alg_qubits = Vec::new();
-//     for i in (1..width - 1).step_by(2) {
-//         alg_qubits.push(Location::new(width + i));
-//         alg_qubits.push(Location::new(i + width * 3));
-//     }
-//     let mut perimeter = Vec::new();
-//     let top_edge = (0..width).map(|i| Location::new(i));
-//     let right_edge = (1..height).map(|i| Location::new(i * width + width - 1));
-//     let bottom_edge = (0..width - 1)
-//         .rev()
-//         .map(|i| Location::new(i + width * (height - 1)));
-//     let left_edge = (1..height - 1).rev().map(|i| Location::new(i * width));
-//     perimeter.extend(top_edge);
-//     perimeter.extend(right_edge);
-//     perimeter.extend(bottom_edge);
-//     perimeter.extend(left_edge);
-//     // iterate over every other location on the perimeter
-//     let mut magic_state_qubits = Vec::new();
-//     for i in (1..perimeter.len()).step_by(2) {
-//         magic_state_qubits.push(perimeter[i]);
-//     }
-//     return ScmrArchitecture {
-//         width,
-//         height,
-//         alg_qubits,
-//         magic_state_qubits,
-//     };
-// }
-
 pub fn swap_keys(
     map: &HashMap<Qubit, Location>,
     loc1: Location,
@@ -250,8 +219,8 @@ pub fn swap_keys(
     return new_map;
 }
 
-pub fn push_and_return<T: Clone>(vec: Vec<T>, item: T) -> Vec<T> {
-    let mut new = vec.clone();
+pub fn push_and_return<T: Clone, C: Clone + IntoIterator<Item = T>>(coll: C, item: T) -> Vec<T> {
+    let mut new: Vec<T> = coll.into_iter().collect();
     new.push(item);
     return new;
 }
@@ -317,7 +286,7 @@ pub fn identity_application<T: GateImplementation>(step: &Step<T>) -> Step<T> {
     };
 }
 pub fn all_paths<A: Architecture>(
-    arch: A,
+    arch: &A,
     starts: Vec<Location>,
     ends: Vec<Location>,
     blocked: Vec<Location>,
@@ -341,49 +310,77 @@ pub fn all_paths<A: Architecture>(
         .filter(|x| loc_to_node.contains_key(x))
         .cloned()
         .collect();
-    let mut visited = unblocked_starts.clone();
+    let mut start_counter = 0;
+    let mut visited = Vec::new();
     let mut stack: Vec<std::vec::IntoIter<NodeIndex>> = Vec::new();
-    let mut start_neighbors = Vec::new();
-    for start in unblocked_starts.iter() {
-        
-        println!("{:?}", graph.neighbors(loc_to_node[start]).collect::<Vec<_>>());
-        let neighbors: HashSet<_> = graph.neighbors_directed(loc_to_node[start], Outgoing).collect();
-        
-        start_neighbors.extend(neighbors);
+    if !unblocked_starts.is_empty() {
+        let start_neighbors: Vec<_> = graph
+            .neighbors(loc_to_node[&unblocked_starts[start_counter]])
+            .collect();
+        stack.push(start_neighbors.into_iter());
+        visited.push(unblocked_starts[start_counter]);
     }
-    stack.push(start_neighbors.into_iter());
-    
-    from_fn(move || {
-        while let Some(children) = stack.last_mut() {
-            if let Some(child) = children.next() {
-                let loc = graph[child];
-                if visited.len() < max_length {
-                    if ends.contains(&loc) {
-                        let path = visited.iter().chain(Some(&loc)).cloned().collect();
-                        
-                        return Some(path);
-                    } else if !visited.contains(&loc) {
-                        
 
-                        visited.push(loc);
-                        let neighbors: HashSet<_> = graph.neighbors_directed(child, Outgoing).collect();
-                        let n = neighbors.into_iter().collect::<Vec<_>>().into_iter();
-                        stack.push(n);
+    from_fn(move || {
+        let mut exhausted = start_counter >= unblocked_starts.len();
+        while !exhausted {
+            if let Some(children) = stack.last_mut() {
+                if let Some(child) = children.next() {
+                    let loc = graph[child];
+                    if visited.len() < max_length {
+                        if ends.contains(&loc) {
+                            let path = visited.iter().chain(Some(&loc)).cloned().collect();
+                            return Some(path);
+                        } else if !visited.contains(&loc) {
+                            visited.push(loc);
+                            let neighbors: Vec<_> =
+                                graph.neighbors_directed(child, Outgoing).collect();
+                            let n = neighbors.into_iter();
+                            stack.push(n);
+                        }
+                    } else {
+                        if unblocked_ends.contains(&graph[child])
+                            || children.any(|x| unblocked_ends.contains(&graph[x]))
+                        {
+                            let path = visited.iter().chain(Some(&loc)).cloned().collect();
+                            return Some(path);
+                        }
+                        stack.pop();
+                        visited.pop();
                     }
                 } else {
-                    if ends.contains(&graph[child]) || children.any(|x| ends.contains(&graph[x])) {
-                        let path = visited.iter().chain(Some(&loc)).cloned().collect();
-                        return Some(path);
-                    }
                     stack.pop();
                     visited.pop();
                 }
             } else {
- 
-                stack.pop();
-                visited.pop();
+                start_counter += 1;
+                if start_counter < unblocked_starts.len() {
+                    visited = vec![unblocked_starts[start_counter]];
+                    let start_neighbors: Vec<_> = graph
+                        .neighbors(loc_to_node[&unblocked_starts[start_counter]])
+                        .collect();
+                    stack.push(start_neighbors.into_iter());
+                } else {
+                    exhausted = true;
+                }
             }
         }
         None
     })
+}
+
+pub fn build_criticality_table(c: &Circuit) -> HashMap<usize, usize> {
+    let mut qubit_table: HashMap<usize, usize> = HashMap::new();
+    let mut gate_table: HashMap<usize, usize> = HashMap::new();
+    for gate in &c.gates {
+        let d = max(c.qubits.iter().map(|x| qubit_table.get(&x.get_index())))
+            .flatten()
+            .copied()
+            .unwrap_or_default();
+        gate_table.insert(gate.id, d + 1);
+        for q in &c.qubits {
+            qubit_table.insert(q.get_index(), d + 1);
+        }
+    }
+    gate_table
 }

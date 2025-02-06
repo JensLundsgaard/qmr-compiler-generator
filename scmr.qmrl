@@ -1,11 +1,7 @@
 GateRealization[
     name='ScmrGate'
     data= (path : Vec<Location>)
-    realize_gate =  
-        match shortest_path(arch, vertical_neighbors(Step.map[Gate.qubits[0]], Arch.width, Arch.height), horizontal_neighbors(Step.map[Gate.qubits[1]], arch.width), ((values(Step.map())).extend(Arch.magic_state_qubits())).extend(fold(Vec(), |x, acc| -> acc.extend(x), map(|x| -> x.implementation.(path()), Step.implemented_gates())))){
-            Some(x)=>Some(GateRealization{path=x}),
-            None => None
-    }
+    realize_gate =  map(|x| -> GateRealization{path = x}, all_paths(arch, vertical_neighbors(Step.map[Gate.qubits[0]], Arch.width, Arch.height), horizontal_neighbors(Step.map[Gate.qubits[1]], arch.width), ((values(Step.map())).extend(Arch.magic_state_qubits())).extend(fold(Vec(), |x, acc| -> acc.extend(x), map(|x| -> x.implementation.(path()), Step.implemented_gates())))))
         ]
 
 Transition[

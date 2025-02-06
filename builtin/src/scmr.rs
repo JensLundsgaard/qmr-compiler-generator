@@ -1,4 +1,7 @@
-use std::{collections::{HashMap, HashSet}, iter::empty};
+use std::{
+    collections::{HashMap, HashSet},
+    iter::empty,
+};
 
 use petgraph::{algo::all_simple_paths, graph::NodeIndex, Graph};
 use serde::Serialize;
@@ -99,6 +102,41 @@ pub fn compact_layout(alg_qubit_count: usize) -> ScmrArchitecture {
         magic_state_qubits,
     };
 }
+
+pub fn square_sparse_layout(alg_qubit_count: usize) -> ScmrArchitecture {
+    let agc = alg_qubit_count as f64;
+    let width = 2 * (agc.sqrt().ceil() as usize) + 3;
+    let height = width;
+    let mut alg_qubits = Vec::new();
+    let interior = |coord| coord > 0 && coord < width - 1;
+    for i in 0..width * height {
+        let (x, y) = (i % width, i / width);
+        if interior(x) && interior(y) && x % 2 == 0 && y % 2 == 0 {
+            alg_qubits.push(Location::new(i));
+        }
+    }
+    let mut perimeter = Vec::new();
+    let top_edge = (0..width).map(|i| Location::new(i));
+    let right_edge = (1..height).map(|i| Location::new(i * width + width - 1));
+    let bottom_edge = (0..width - 1)
+        .rev()
+        .map(|i| Location::new(i + width * (height - 1)));
+    let left_edge = (1..height - 1).rev().map(|i| Location::new(i * width));
+    perimeter.extend(top_edge);
+    perimeter.extend(right_edge);
+    perimeter.extend(bottom_edge);
+    perimeter.extend(left_edge);
+    let mut magic_state_qubits = Vec::new();
+    for i in (1..perimeter.len()).step_by(2) {
+        magic_state_qubits.push(perimeter[i]);
+    }
+    return ScmrArchitecture {
+        width,
+        height,
+        alg_qubits,
+        magic_state_qubits,
+    };
+}
 #[derive(Debug, Serialize, Clone, Hash, PartialEq, Eq)]
 pub struct ScmrGateImplementation {
     path: Vec<Location>,
@@ -136,7 +174,7 @@ fn scmr_implement_gate(
     step: &ScmrStep,
     arch: &ScmrArchitecture,
     gate: &Gate,
-) -> Vec<ScmrGateImplementation> {
+) -> Option<ScmrGateImplementation> {
     let (mut graph, mut loc_to_node) = arch.get_graph();
     for loc in &arch.magic_state_qubits {
         assert!(!arch.alg_qubits.clone().into_iter().any(|l| l == *loc));
@@ -183,24 +221,29 @@ fn scmr_implement_gate(
             (target_neighbors, msf_neighors)
         }
     };
-    let mut paths:  Vec<Vec<NodeIndex>> = Vec::new();
+    let mut best: Option<(i32, Vec<NodeIndex>)> = None;
 
     for start in &starts {
         for end in &ends {
             if loc_to_node.contains_key(start) && loc_to_node.contains_key(end) {
-                let res: Vec<Vec<NodeIndex>> = petgraph::algo::all_simple_paths(
+                let res = petgraph::algo::astar(
                     &graph,
                     loc_to_node[&start],
-                    loc_to_node[&end],
-                    0,
-                    None,
-                ).collect();
-                paths.extend(res);
+                    |finish| finish == loc_to_node[&end],
+                    |_e| 1,
+                    |_| 0,
+                );
+                if best.is_none()
+                    || ((&res).is_some() && &res.as_ref().unwrap().0 < &best.as_ref().unwrap().0)
+                {
+                    best = res;
+                }
             }
         }
     }
-return paths.into_iter().map(|path| ScmrGateImplementation { path: path.into_iter().map(|x| graph[x]).collect() }).collect();
-
+    return best.map(|(_cost, path)| ScmrGateImplementation {
+        path: path.into_iter().map(|n| graph[n]).collect(),
+    });
 }
 
 fn scmr_implement_gate_alt(
@@ -216,7 +259,11 @@ fn scmr_implement_gate_alt(
         .collect();
     let mapped: Vec<_> = step.map.values().cloned().collect();
     let magic_states = arch.magic_state_qubits.clone();
-    let blocked  = mapped.into_iter().chain(magic_states.into_iter()).chain(paths.into_iter()).collect();
+    let blocked = mapped
+        .into_iter()
+        .chain(magic_states.into_iter())
+        .chain(paths.into_iter())
+        .collect();
     let (starts, ends) = match &gate.gate_type {
         GateType::CX => {
             let (cpos, tpos) = (step.map[&gate.qubits[0]], step.map[&gate.qubits[1]]);
@@ -238,10 +285,8 @@ fn scmr_implement_gate_alt(
             (target_neighbors, msf_neighors)
         }
     };
-    all_paths(arch.clone(), starts, ends, blocked).map(|p| ScmrGateImplementation{path: p})
-
+    all_paths(arch, starts, ends, blocked).map(|p| ScmrGateImplementation { path: p })
 }
-
 
 pub fn scmr_solve(c: &Circuit, a: &ScmrArchitecture) -> CompilerResult<ScmrGateImplementation> {
     return solve(
@@ -251,6 +296,6 @@ pub fn scmr_solve(c: &Circuit, a: &ScmrArchitecture) -> CompilerResult<ScmrGateI
         scmr_implement_gate_alt,
         scmr_step_cost,
         None,
-        true
+        true,
     );
 }

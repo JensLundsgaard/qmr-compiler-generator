@@ -112,7 +112,7 @@ pub enum Expr {
 
     Equal(Box<Expr>, Box<Expr>),
 }
-#[derive(Debug, PartialEq, PartialOrd,)]
+#[derive(Debug, PartialEq, PartialOrd)]
 pub enum AccessExpr {
     RecTupleAccess(String, Box<AccessExpr>),
     RecArrayAccess(String, Box<AccessExpr>),

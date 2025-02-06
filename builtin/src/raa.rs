@@ -329,6 +329,6 @@ pub fn raa_solve(c: &Circuit, arch: &RaaArchitecture) -> CompilerResult<RaaGateI
         raa_implement_gate,
         raa_step_cost,
         None,
-         true,
+        true,
     )
 }
