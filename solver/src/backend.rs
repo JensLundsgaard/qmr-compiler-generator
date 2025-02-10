@@ -110,7 +110,7 @@ fn sim_anneal_mapping_search<T: Architecture>(
 
 fn route<
     A: Architecture,
-    R: Transition<G> + Debug,
+    R: Transition<G, A> + Debug,
     G: GateImplementation + Debug,
     I: IntoIterator<Item = G>,
 >(
@@ -158,7 +158,7 @@ fn route<
                 cost += step_cost(&s, arch);
                 steps.push(s);
                 trans_taken.push(trans.repr());
-                cost += trans.cost();
+                cost += trans.cost(arch);
             }
             None => {
                 panic!("No valid next step found");
@@ -174,7 +174,7 @@ fn route<
 
 fn find_best_next_step<
     A: Architecture,
-    R: Transition<G>,
+    R: Transition<G, A>,
     G: GateImplementation,
     I: IntoIterator<Item = G>,
 >(
@@ -198,7 +198,7 @@ fn find_best_next_step<
             next_step.max_step(&executable, arch, &implement_gate);
         }
         let s_cost = step_cost(&next_step, arch);
-        let t_cost = trans.cost();
+        let t_cost = trans.cost(arch);
         let m_cost = map_eval(&circuit_from_gates(executable), &next_step.map);
         let total_criticality: usize = next_step
             .gates()
@@ -226,7 +226,7 @@ fn find_best_next_step<
 
 pub fn solve<
     A: Architecture,
-    R: Transition<G> + Debug,
+    R: Transition<G, A> + Debug,
     G: GateImplementation + Debug,
     I: IntoIterator<Item = G>,
 >(
@@ -276,7 +276,7 @@ pub fn solve<
 
 pub fn sabre_solve<
     A: Architecture,
-    R: Transition<G> + Debug,
+    R: Transition<G, A> + Debug,
     G: GateImplementation + Debug,
     I: IntoIterator<Item = G>,
 >(

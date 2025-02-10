@@ -61,7 +61,7 @@ impl GateImplementation for NisqGateImplementation {}
 
 type NisqStep = Step<NisqGateImplementation>;
 
-impl Transition<NisqGateImplementation> for NisqTrans {
+impl Transition<NisqGateImplementation, NisqArchitecture> for NisqTrans {
     fn apply(&self, step: &NisqStep) -> NisqStep {
         let mut new_step = step.clone();
         new_step.map = swap_on_edge(&step.map, self.edge);
@@ -72,7 +72,7 @@ impl Transition<NisqGateImplementation> for NisqTrans {
         return format!("{:?}", self);
     }
 
-    fn cost(&self) -> f64 {
+    fn cost(&self, _arch : &NisqArchitecture) -> f64 {
         if self.edge.0 == self.edge.1 {
             0.0
         } else {

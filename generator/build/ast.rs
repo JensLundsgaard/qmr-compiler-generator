@@ -19,7 +19,7 @@ pub struct StepBlock {
 #[derive(Debug)]
 pub struct ArchitectureBlock {
     pub data: NamedTuple,
-    pub get_locations: Expr,
+    pub get_locations: Option<Expr>,
 }
 
 #[derive(Debug)]
@@ -38,6 +38,7 @@ pub struct NamedTuple {
 pub enum Ty {
     LocationTy,
     IntTy,
+    FloatTy,
     TupleTy(Vec<Ty>),
     VectorTy(Box<Ty>),
 }
@@ -114,12 +115,15 @@ pub enum Expr {
 }
 #[derive(Debug, PartialEq, PartialOrd)]
 pub enum AccessExpr {
-    RecTupleAccess(String, Box<AccessExpr>),
-    RecArrayAccess(String, Box<AccessExpr>),
-    TupleAccess(String, Box<Expr>),
-    ArrayAccess(String, Box<Expr>),
-    Field(String),
+    Access(String, Box<AccessChain>),
 }
+#[derive(PartialEq, PartialOrd, Debug)]
+pub enum AccessChain {
+    Nil,
+    TupleAccess(Box<Expr>, Box<AccessChain>),
+    ArrayAccess(Box<Expr>, Box<AccessChain>),
+}
+
 #[derive(PartialEq, PartialOrd, Debug, Clone)]
 pub enum DataType {
     Arch,

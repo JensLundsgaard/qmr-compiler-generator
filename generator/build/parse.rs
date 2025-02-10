@@ -4,20 +4,26 @@ use text::keyword;
 use crate::{ast, ProblemDefinition};
 
 fn type_parser() -> impl Parser<char, ast::Ty, Error = Simple<char>> {
-    let atom_ty = just("Location")
-        .map(|_| ast::Ty::LocationTy)
-        .or(just("Int").map(|_| ast::Ty::IntTy));
-    let tuple_ty = atom_ty
-        .separated_by(just(","))
-        .at_least(1)
-        .delimited_by(just("("), just(")"))
-        .map(ast::Ty::TupleTy);
-    let vector_ty = just("Vec")
-        .ignore_then(just("<"))
-        .ignore_then(atom_ty)
-        .then_ignore(just(">"))
-        .map(|v| ast::Ty::VectorTy(Box::new(v)));
-    atom_ty.or(tuple_ty).or(vector_ty)
+    recursive(|type_parser| {
+        let atom_ty = just("Location")
+            .map(|_| ast::Ty::LocationTy)
+            .or(just("Int").map(|_| ast::Ty::IntTy))
+            .or(just("Float").map(|_| ast::Ty::FloatTy));
+
+        let tuple_ty = type_parser.clone()
+            .separated_by(just(","))
+            .at_least(1)
+            .delimited_by(just("("), just(")"))
+            .map(ast::Ty::TupleTy);
+
+        let vector_ty = just("Vec")
+            .ignore_then(just("<"))
+            .ignore_then(type_parser.clone())
+            .then_ignore(just(">"))
+            .map(|v| ast::Ty::VectorTy(Box::new(v)));
+
+        atom_ty.or(tuple_ty).or(vector_ty)
+    })
 }
 
 fn named_tuple_parser() -> impl Parser<char, ast::NamedTuple, Error = Simple<char>> {
@@ -157,7 +163,7 @@ fn arch_block_parser() -> impl Parser<char, Option<ast::ArchitectureBlock>, Erro
         .padded()
         .ignore_then(data)
         .padded()
-        .then(get_locations)
+        .then(get_locations.or_not())
         .padded()
         .then_ignore(just("]"))
         .map(|(data, get_locations)| ast::ArchitectureBlock {
@@ -272,35 +278,27 @@ fn expr_parser() -> impl Parser<char, ast::Expr, Error = Simple<char>> {
                 vec1: Box::new(vec),
                 vec2: Box::new(elem),
             });
-
-        let access_expr = recursive(|access_expr_parser| {
-            let field = text::ident().map(|name| ast::AccessExpr::Field(name));
-            let rec_tuple_access = text::ident()
-                .then_ignore(just('.'))
-                .then(access_expr_parser.clone())
-                .map(|(f, e)| ast::AccessExpr::RecTupleAccess(f, Box::new(e)));
-            let rec_array_access = text::ident()
-                .then(
-                    access_expr_parser
-                        .clone()
-                        .delimited_by(just('['), just(']')),
-                )
-                .map(|(f, e)| ast::AccessExpr::RecArrayAccess(f, Box::new(e)));
-            let tuple_access = text::ident()
-                .then_ignore(just('.'))
-                .then(expr_parser.clone().delimited_by(just("("), just(")")))
-                .map(|(f, e)| ast::AccessExpr::TupleAccess(f, Box::new(e)));
-            let array_access = text::ident()
-                .then(expr_parser.clone().delimited_by(just('['), just(']')))
-                .map(|(f, e)| ast::AccessExpr::ArrayAccess(f, Box::new(e)));
-            choice((
-                rec_tuple_access,
-                rec_array_access,
-                tuple_access,
-                array_access,
-                field,
-            ))
+        let access_chain = recursive(|access_chain_parser| {
+            let array_access = expr_parser
+                .clone()
+                .delimited_by(just('['), just(']'))
+                .then(access_chain_parser.clone())
+                .map(|(expr, access_chain)| {
+                    ast::AccessChain::ArrayAccess(Box::new(expr), access_chain)
+                });
+            let tuple_access = just('.')
+                .ignore_then(expr_parser.clone().delimited_by(just("("), just(")")))
+                .then(access_chain_parser.clone())
+                .map(|(expr, access_chain)| {
+                    ast::AccessChain::TupleAccess(Box::new(expr), access_chain)
+                });
+            (array_access.or(tuple_access))
+                .or_not()
+                .map(|c| Box::new(c.unwrap_or(ast::AccessChain::Nil)))
         });
+        let access_expr = text::ident()
+            .then(access_chain)
+            .map(|(id, ac)| ast::AccessExpr::Access(id, ac));
         let get_data = data_type_parser()
             .then_ignore(just("."))
             .then(access_expr.clone())

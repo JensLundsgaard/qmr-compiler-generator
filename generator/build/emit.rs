@@ -152,6 +152,7 @@ fn emit_type(ty: &Ty) -> syn::Type {
             syn::parse_quote!(Vec<#inner_ty>)
         }
         Ty::IntTy => syn::parse_quote!(usize),
+        Ty::FloatTy => syn::parse_quote!(f64),
     }
 }
 
@@ -210,9 +211,12 @@ fn emit_impl_gate_methods(imp_data: &NamedTuple) -> TokenStream {
 fn emit_impl_arch(arch: &Option<ArchitectureBlock>) -> TokenStream {
     let arch_name = syn::Ident::new("CustomArch", Span::call_site());
     let body = match arch {
-        Some(arch) => {
+        Some(ArchitectureBlock {
+            data: d,
+            get_locations: Some(expr),
+        }) => {
             let get_locations = emit_expr(
-                &arch.get_locations,
+                expr,
                 &Context::DataTypeContext(DataType::Arch),
                 &arch_name,
                 &arch_name,
@@ -222,7 +226,7 @@ fn emit_impl_arch(arch: &Option<ArchitectureBlock>) -> TokenStream {
                 return #get_locations;
             }
         }
-        None => {
+        _ => {
             quote! {
                     let mut locations = Vec::new();
                     for node in self.graph.node_indices() {
@@ -340,7 +344,7 @@ fn emit_impl_trans(t: &TransitionBlock, imp: &ImplBlock) -> TokenStream {
         None,
     );
     quote! {
-        impl Transition<#imp_struct_name> for #trans_struct_name {
+        impl Transition<#imp_struct_name, CustomArch> for #trans_struct_name {
             fn apply(&self, step: &Step<#imp_struct_name>) -> Step<#imp_struct_name> {
                #apply_expr
             }
@@ -348,7 +352,7 @@ fn emit_impl_trans(t: &TransitionBlock, imp: &ImplBlock) -> TokenStream {
                 return format!("{:?}", self);
             }
 
-            fn cost(&self) -> f64 {
+            fn cost(&self, arch :& CustomArch) -> f64 {
                 #cost_expr
             }
         }
@@ -808,6 +812,30 @@ fn emit_expr(
     }
 }
 
+fn emit_access_chain(
+    chain: &AccessChain,
+    c: &Context,
+    trans_struct_name: &Ident,
+    imp_struct_name: &Ident,
+    bound_var: Option<&str>,
+) -> TokenStream {
+    match chain {
+        AccessChain::Nil => TokenStream::default(),
+        AccessChain::TupleAccess(expr, rest_chain) => {
+            let emit_right =
+                emit_access_chain(rest_chain, c, trans_struct_name, imp_struct_name, bound_var);
+            let emit_expr = emit_expr(expr, c, trans_struct_name, imp_struct_name, bound_var);
+            quote! {.#emit_expr #emit_right}
+        }
+        AccessChain::ArrayAccess(expr, rest_chain) => {
+            let emit_right =
+                emit_access_chain(rest_chain, c, trans_struct_name, imp_struct_name, bound_var);
+            let emit_expr = emit_expr(expr, c, trans_struct_name, imp_struct_name, bound_var);
+            quote! {[#emit_expr] #emit_right}
+        }
+    }
+}
+
 fn emit_access_expr(
     a: &AccessExpr,
     c: &Context,
@@ -816,41 +844,16 @@ fn emit_access_expr(
     bound_var: Option<&str>,
 ) -> TokenStream {
     match a {
-        AccessExpr::Field(name) => {
-            let field_name = syn::Ident::new(name, Span::call_site());
-            quote! {#field_name}
-        }
-        AccessExpr::TupleAccess(name, i) => {
-            let field_name = syn::Ident::new(name, Span::call_site());
-            let emit_i = emit_expr(i, c, trans_struct_name, imp_struct_name, bound_var);
-            quote! {#field_name.#emit_i}
-        }
-        AccessExpr::ArrayAccess(name, i) => {
-            let field_name = syn::Ident::new(name, Span::call_site());
-            let emit_i = emit_expr(i, c, trans_struct_name, imp_struct_name, bound_var);
-            quote! {#field_name[#emit_i]}
-        }
-        AccessExpr::RecTupleAccess(name, access_expr) => {
-            let field_name = syn::Ident::new(name, Span::call_site());
-            let inner = emit_access_expr(
-                access_expr,
+        AccessExpr::Access(field, access_chain) => {
+            let field_name = syn::Ident::new(field, Span::call_site());
+            let access_chain_emitted = emit_access_chain(
+                access_chain,
                 c,
                 trans_struct_name,
                 imp_struct_name,
                 bound_var,
             );
-            quote! {#field_name.#inner}
-        }
-        AccessExpr::RecArrayAccess(name, access_expr) => {
-            let field_name = syn::Ident::new(name, Span::call_site());
-            let inner = emit_access_expr(
-                access_expr,
-                c,
-                trans_struct_name,
-                imp_struct_name,
-                bound_var,
-            );
-            quote! {#field_name[#inner]}
+            quote! {#field_name #access_chain_emitted}
         }
     }
 }

@@ -5,6 +5,7 @@ use serde::Deserialize;
 use serde::Serialize;
 use std::fmt::Debug;
 use std::hash::Hash;
+use std::ops::Index;
 use std::{
     collections::{HashMap, HashSet},
     fmt,
@@ -23,6 +24,14 @@ impl Qubit {
 
 #[derive(Hash, PartialEq, Eq, Clone, Copy, Debug, Default, Serialize, Deserialize)]
 pub struct Location(usize);
+
+impl<T> Index<Location> for Vec<T> {
+    type Output = T;
+
+    fn index(&self, loc: Location) -> &Self::Output {
+        &self[loc.get_index()]
+    }
+}
 
 pub type QubitMap = HashMap<Qubit, Location>;
 
@@ -204,10 +213,10 @@ impl<G: GateImplementation> Step<G> {
     }
 }
 
-pub trait Transition<T: GateImplementation> {
+pub trait Transition<T: GateImplementation, A: Architecture> {
     fn apply(&self, step: &Step<T>) -> Step<T>;
     fn repr(&self) -> String;
-    fn cost(&self) -> f64;
+    fn cost(&self, arch: &A) -> f64;
 }
 
 pub trait Architecture {

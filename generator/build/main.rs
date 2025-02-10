@@ -23,16 +23,22 @@ fn test_program() -> ProblemDefinition {
                     args: vec![Expr::Tuple(vec![
                         Expr::MapAccess(Box::new(Expr::GetData {
                             d: DataType::Gate,
-                            access: AccessExpr::ArrayAccess(
+                            access: AccessExpr::Access(
                                 "qubits".to_string(),
-                                Box::new(Expr::IndexLiteral(0)),
+                                Box::new(AccessChain::ArrayAccess(
+                                    Box::new(Expr::IndexLiteral(0)),
+                                    Box::new(AccessChain::Nil),
+                                )),
                             ),
                         })),
                         Expr::MapAccess(Box::new(Expr::GetData {
                             d: DataType::Gate,
-                            access: AccessExpr::ArrayAccess(
+                            access: AccessExpr::Access(
                                 "qubits".to_string(),
-                                Box::new(Expr::IndexLiteral(1)),
+                                Box::new(AccessChain::ArrayAccess(
+                                    Box::new(Expr::IndexLiteral(1)),
+                                    Box::new(AccessChain::Nil),
+                                )),
                             ),
                         })),
                     ])],
@@ -42,9 +48,12 @@ fn test_program() -> ProblemDefinition {
                         "u".to_string(),
                         Expr::MapAccess(Box::new(Expr::GetData {
                             d: DataType::Gate,
-                            access: AccessExpr::ArrayAccess(
+                            access: AccessExpr::Access(
                                 "qubits".to_string(),
-                                Box::new(Expr::IndexLiteral(0)),
+                                Box::new(AccessChain::ArrayAccess(
+                                    Box::new(Expr::IndexLiteral(0)),
+                                    Box::new(AccessChain::Nil),
+                                )),
                             ),
                         })),
                     ),
@@ -52,9 +61,12 @@ fn test_program() -> ProblemDefinition {
                         "v".to_string(),
                         Expr::MapAccess(Box::new(Expr::GetData {
                             d: DataType::Gate,
-                            access: AccessExpr::ArrayAccess(
+                            access: AccessExpr::Access(
                                 "qubits".to_string(),
-                                Box::new(Expr::IndexLiteral(1)),
+                                Box::new(AccessChain::ArrayAccess(
+                                    Box::new(Expr::IndexLiteral(0)),
+                                    Box::new(AccessChain::Nil),
+                                )),
                             ),
                         })),
                     ),
@@ -73,16 +85,22 @@ fn test_program() -> ProblemDefinition {
             apply: Expr::SwapPair(
                 Box::new(Expr::GetData {
                     d: DataType::Transition,
-                    access: AccessExpr::TupleAccess(
+                    access: AccessExpr::Access(
                         "edge".to_string(),
-                        Box::new(Expr::IndexLiteral(0)),
+                        Box::new(AccessChain::TupleAccess(
+                            Box::new(Expr::IndexLiteral(0)),
+                            Box::new(AccessChain::Nil),
+                        )),
                     ),
                 }),
                 Box::new(Expr::GetData {
                     d: DataType::Transition,
-                    access: AccessExpr::TupleAccess(
+                    access: AccessExpr::Access(
                         "edge".to_string(),
-                        Box::new(Expr::IndexLiteral(1)),
+                        Box::new(AccessChain::TupleAccess(
+                            Box::new(Expr::IndexLiteral(1)),
+                            Box::new(AccessChain::Nil),
+                        )),
                     ),
                 }),
             ),
@@ -90,7 +108,7 @@ fn test_program() -> ProblemDefinition {
                 cond: Box::new(Expr::Equal(
                     Box::new(Expr::GetData {
                         d: DataType::Transition,
-                        access: AccessExpr::Field("edge".to_string()),
+                        access: AccessExpr::Access("edge".to_string(), Box::new(AccessChain::Nil)),
                     }),
                     Box::new(Expr::Tuple(vec![Expr::Tuple(vec![
                         Expr::LocationLiteral(0),
@@ -125,7 +143,7 @@ fn test_program() -> ProblemDefinition {
 }
 
 fn from_file() {
-    let path = env::var("QMRL_PATH").unwrap_or("nisq.qmrl".to_string());
+    let path = env::var("QMRL_PATH").unwrap_or("/home/abtin/qmrsl/qmrl/nisq.qmrl".to_string());
     let p = parse::read_file(&path);
     let ast = format!("{:?}", p);
     let _ = std::fs::write("debug", ast.as_bytes());

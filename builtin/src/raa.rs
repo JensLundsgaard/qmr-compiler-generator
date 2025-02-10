@@ -86,7 +86,7 @@ impl GateImplementation for RaaGateImplementation {}
 
 type RaaStep = Step<RaaGateImplementation>;
 
-impl Transition<RaaGateImplementation> for IdTransition {
+impl Transition<RaaGateImplementation, RaaArchitecture> for IdTransition {
     fn apply(&self, step: &RaaStep) -> RaaStep {
         return RaaStep {
             implemented_gates: HashSet::new(),
@@ -97,7 +97,7 @@ impl Transition<RaaGateImplementation> for IdTransition {
         return "id".to_string();
     }
 
-    fn cost(&self) -> f64 {
+    fn cost(&self, _arch : &RaaArchitecture) -> f64 {
         0.0
     }
 }
@@ -112,7 +112,7 @@ struct RaaMove {
     cost: f64,
 }
 
-impl Transition<RaaGateImplementation> for RaaMove {
+impl Transition<RaaGateImplementation, RaaArchitecture> for RaaMove {
     fn apply(&self, step: &RaaStep) -> RaaStep {
         let mut new_step = step.clone();
         new_step.map.insert(self.qubit, self.dst);
@@ -123,7 +123,7 @@ impl Transition<RaaGateImplementation> for RaaMove {
         format!("RELOCATE {:?} {:?}", self.qubit, self.dst)
     }
 
-    fn cost(&self) -> f64 {
+    fn cost(&self, _arch : &RaaArchitecture) -> f64 {
         self.cost
     }
 }

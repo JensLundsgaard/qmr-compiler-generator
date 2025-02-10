@@ -146,7 +146,7 @@ impl GateImplementation for ScmrGateImplementation {}
 type ScmrStep = Step<ScmrGateImplementation>;
 #[derive(Debug)]
 struct IdTransition;
-impl Transition<ScmrGateImplementation> for IdTransition {
+impl Transition<ScmrGateImplementation, ScmrArchitecture> for IdTransition {
     fn apply(&self, step: &ScmrStep) -> ScmrStep {
         return ScmrStep {
             implemented_gates: HashSet::new(),
@@ -157,7 +157,7 @@ impl Transition<ScmrGateImplementation> for IdTransition {
         return "id".to_string();
     }
 
-    fn cost(&self) -> f64 {
+    fn cost(&self, _arch: &ScmrArchitecture) -> f64 {
         0.0
     }
 }
