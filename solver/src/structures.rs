@@ -45,18 +45,18 @@ impl Location {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize)]
+pub enum PauliTerm{
+    PauliX,
+    PauliZ
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize)]
 pub enum GateType {
     CX,
     T,
+    PauliRot{axis : Vec<PauliTerm>, angle : (usize, usize)}
 }
-impl fmt::Display for GateType {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            GateType::CX => write!(f, "CX"),
-            GateType::T => write!(f, "T"),
-        }
-    }
-}
+
 
 #[derive(Clone, Debug, Eq, Hash, Serialize)]
 pub struct Gate {

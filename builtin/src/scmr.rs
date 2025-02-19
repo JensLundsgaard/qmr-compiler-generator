@@ -220,6 +220,7 @@ fn scmr_implement_gate(
                 .collect();
             (target_neighbors, msf_neighors)
         }
+        GateType::PauliRot { axis, angle } => (vec![], vec![]),
     };
     let mut best: Option<(i32, Vec<NodeIndex>)> = None;
 
@@ -284,6 +285,7 @@ fn scmr_implement_gate_alt(
                 .collect();
             (target_neighbors, msf_neighors)
         }
+        GateType::PauliRot { axis, angle } => (vec![], vec![]),
     };
     all_paths(arch, starts, ends, blocked).map(|p| ScmrGateImplementation { path: p })
 }

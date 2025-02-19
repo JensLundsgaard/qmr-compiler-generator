@@ -7,6 +7,7 @@ use syn::Ident;
 pub fn emit_program(p: ProblemDefinition) -> TokenStream {
     let use_statements = quote! {
         use solver::structures::*;
+        use solver::structures::GateType::*;
         use solver::utils::*;
         use solver::backend;
         use serde_json::{Value, from_value};
@@ -14,6 +15,7 @@ pub fn emit_program(p: ProblemDefinition) -> TokenStream {
         use std::collections::{HashMap, HashSet};
         use std::fs::File;
     };
+    let define_gate_types = emit_gate_types(&p.imp.routed_gates);
     let define_gi_struct = emit_define_struct(&p.imp.data);
     let define_arch_struct = emit_define_arch_struct(&p.arch);
     let define_transition_struct = emit_define_struct(&p.trans.data);
@@ -30,6 +32,7 @@ pub fn emit_program(p: ProblemDefinition) -> TokenStream {
     let define_mapping_heuristic = emit_mapping_heuristic();
     quote! {
         #use_statements
+        #define_gate_types
         #define_gi_struct
         #define_arch_struct
         #define_transition_struct
@@ -140,6 +143,18 @@ fn emit_define_struct(data: &NamedTuple) -> TokenStream {
     }
 }
 
+fn emit_gate_type(g: &GateType) -> TokenStream {
+    match g {
+        GateType::CX => quote! {"CX"},
+        GateType::T => quote! {"CX"},
+        GateType::PauliRot => quote! {"PauliRot"},
+    }
+}
+
+fn emit_gate_types(routed_gates: &Vec<GateType>) -> TokenStream {
+    let gate_types = routed_gates.iter().map(|g| emit_gate_type(g));
+    quote! {const GATE_TYPES : &[&str] = &[#(#gate_types),*];}
+}
 fn emit_type(ty: &Ty) -> syn::Type {
     match ty {
         Ty::LocationTy => syn::parse_quote!(Location),
@@ -535,28 +550,72 @@ fn emit_expr(
                 &trans_struct_name,
                 bound_var,
             );
-            let emit_then = emit_expr(
-                then,
-                context,
-                &imp_struct_name,
-                &trans_struct_name,
-                bound_var,
-            );
-            let emit_else = emit_expr(
-                els,
-                context,
-                &imp_struct_name,
-                &trans_struct_name,
-                bound_var,
-            );
-            quote! {
-                if #emit_cond {
-                    #emit_then
-                } else {
-                    #emit_else
+            match (&**then, &**els) {
+                (
+                    Expr::MapIterExpr {
+                        container: container_then,
+                        bound_var: bv_then,
+                        func: func_then,
+                    },
+                    Expr::MapIterExpr {
+                        container: container_els,
+                        bound_var: bv_els,
+                        func: func_els,
+                    },
+                ) if func_then == func_els && bv_then == bv_els => {
+                    let emit_container_then = emit_expr(
+                        container_then,
+                        context,
+                        &imp_struct_name,
+                        &trans_struct_name,
+                        bound_var,
+                    );
+                    let emit_container_else = emit_expr(
+                        container_els,
+                        context,
+                        &imp_struct_name,
+                        &trans_struct_name,
+                        bound_var,
+                    );
+                    let emit_func = emit_expr(
+                        &func_els,
+                        context,
+                        &trans_struct_name,
+                        &imp_struct_name,
+                        Some(bv_els),
+                    );
+                    quote! {
+                        let container = if #emit_cond {#emit_container_then} else{#emit_container_else};
+                        container.into_iter().map(|x| #emit_func)
+
+                    }
+                }
+                _ => {
+                    let emit_then = emit_expr(
+                        then,
+                        context,
+                        &imp_struct_name,
+                        &trans_struct_name,
+                        bound_var,
+                    );
+                    let emit_else = emit_expr(
+                        els,
+                        context,
+                        &imp_struct_name,
+                        &trans_struct_name,
+                        bound_var,
+                    );
+                    quote! {
+                        if #emit_cond {
+                            #emit_then
+                        } else {
+                            #emit_else
+                        }
+                    }
                 }
             }
         }
+
         Expr::CallMethod { d, method, args } => {
             let method_identifier = syn::Ident::new(method, Span::call_site());
             let args = args.iter().map(|arg| {

@@ -6,7 +6,14 @@ pub struct ProblemDefinition {
     pub step: Option<StepBlock>,
 }
 #[derive(Debug)]
+pub enum GateType {
+    CX,
+    T,
+    PauliRot,
+}
+#[derive(Debug)]
 pub struct ImplBlock {
+    pub routed_gates: Vec<GateType>,
     pub data: NamedTuple,
     pub realize: Expr,
 }

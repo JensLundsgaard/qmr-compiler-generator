@@ -1,6 +1,4 @@
-mod nisq;
-mod raa;
-mod scmr;
+use builtin::{nisq, raa, scmr};
 use solver::utils;
 
 fn nisq_test() {

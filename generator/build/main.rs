@@ -9,6 +9,7 @@ use emit::write_to_file;
 fn test_program() -> ProblemDefinition {
     ProblemDefinition {
         imp: ImplBlock {
+            routed_gates : vec![GateType::CX],
             data: NamedTuple {
                 name: "NisqGateImplementation".to_string(),
                 fields: vec![

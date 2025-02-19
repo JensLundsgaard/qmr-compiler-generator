@@ -10,6 +10,13 @@ use std::collections::{HashMap, HashSet};
 use std::fs::File;
 use std::io::{self, BufRead};
 use std::iter::from_fn;
+use std::os::raw::c_double;
+
+#[derive(Debug)]
+pub enum IOError {
+    InputErr,
+    OutputErr(serde_json::Error),
+}
 
 pub fn extract_cnots(filename: &str) -> Circuit {
     let file = File::open(filename).unwrap();
@@ -83,6 +90,64 @@ pub fn extract_scmr_gates(filename: &str) -> Circuit {
             }
         }
     }
+    return Circuit { gates, qubits };
+}
+type GateHandler = Box<dyn FnMut(&regex::Captures, &mut HashSet<Qubit>, usize) -> Gate>;
+
+pub fn extract_gates(filename: &str, gate_types: &[&str]) -> Circuit {
+    let file = File::open(filename).unwrap();
+    let lines = io::BufReader::new(file).lines();
+    let mut gates = Vec::new();
+    let mut qubits = HashSet::new();
+    let mut id = 0;
+    let mut patterns: Vec<(Regex, GateHandler)> = vec![];
+    if gate_types.contains(&"CX") {
+        let cx_pattern = (
+            Regex::new(r"cx\s+q\[(\d+)\],\s*q\[(\d+)\];").unwrap(),
+            Box::new(|c: &regex::Captures, qubits: &mut HashSet<Qubit>, id| {
+                let q1 = Qubit::new(c.get(1).unwrap().as_str().parse::<usize>().unwrap());
+                let q2 = Qubit::new(c.get(2).unwrap().as_str().parse::<usize>().unwrap());
+                qubits.insert(q1);
+                qubits.insert(q2);
+                Gate {
+                    gate_type: GateType::CX,
+                    qubits: vec![q1, q2],
+                    id,
+                }
+            }) as GateHandler,
+        );
+        patterns.push(cx_pattern);
+    }
+    if gate_types.contains(&"T") {
+        let t_pattern = (
+            Regex::new(r"(t|tdg)\s+q\[(\d+)\];").unwrap(),
+            Box::new(
+                |c: &regex::Captures, qubits: &mut HashSet<Qubit>, id: usize| {
+                    let q = Qubit::new(c.get(2).unwrap().as_str().parse::<usize>().unwrap());
+                    qubits.insert(q);
+                    Gate {
+                        gate_type: GateType::T,
+                        qubits: vec![q],
+                        id,
+                    }
+                },
+            ) as GateHandler,
+        );
+
+        patterns.push(t_pattern);
+    }
+
+    for line in lines {
+        let line_str = line.unwrap();
+        for (regex, handler) in &mut patterns {
+            if let Some(caps) = regex.captures(&line_str) {
+                let gate = handler(&caps, &mut qubits, id);
+                gates.push(gate);
+                id += 1;
+            }
+        }
+    }
+
     return Circuit { gates, qubits };
 }
 

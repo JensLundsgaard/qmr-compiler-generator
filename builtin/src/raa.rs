@@ -1,6 +1,6 @@
 use serde::Serialize;
 
-use solver::{backend::solve, structures::*};
+use solver::{backend::{sabre_solve, solve}, structures::*};
 use std::collections::{HashMap, HashSet};
 
 const ACCELERATION_CONST: f64 = 2750.0;
@@ -277,7 +277,7 @@ fn raa_implement_gate(
             src: step.map[&gate.qubits[0]],
             dst: step.map[&gate.qubits[1]],
         });
-    } else if consistent(move_tar_to_ctrl, &row_displacements, &col_displacements) {
+    }  if consistent(move_tar_to_ctrl, &row_displacements, &col_displacements) {
         v.push(RaaGateImplementation {
             src: step.map[&gate.qubits[1]],
             dst: step.map[&gate.qubits[0]],
@@ -323,6 +323,18 @@ fn raa_step_cost(step: &RaaStep, arch: &RaaArchitecture) -> f64 {
 
 pub fn raa_solve(c: &Circuit, arch: &RaaArchitecture) -> CompilerResult<RaaGateImplementation> {
     solve(
+        c,
+        arch,
+        &|s| raa_transitions_dyn_map(s, arch),
+        raa_implement_gate,
+        raa_step_cost,
+        None,
+        true,
+    )
+}
+
+pub fn raa_solve_sabre(c: &Circuit, arch: &RaaArchitecture) -> CompilerResult<RaaGateImplementation> {
+    sabre_solve(
         c,
         arch,
         &|s| raa_transitions_dyn_map(s, arch),

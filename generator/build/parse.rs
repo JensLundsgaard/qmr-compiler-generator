@@ -1,7 +1,10 @@
 use chumsky::prelude::*;
 use text::keyword;
 
-use crate::{ast, ProblemDefinition};
+use crate::{
+    ast::{self, GateType},
+    ProblemDefinition,
+};
 
 fn type_parser() -> impl Parser<char, ast::Ty, Error = Simple<char>> {
     recursive(|type_parser| {
@@ -10,7 +13,8 @@ fn type_parser() -> impl Parser<char, ast::Ty, Error = Simple<char>> {
             .or(just("Int").map(|_| ast::Ty::IntTy))
             .or(just("Float").map(|_| ast::Ty::FloatTy));
 
-        let tuple_ty = type_parser.clone()
+        let tuple_ty = type_parser
+            .clone()
             .separated_by(just(","))
             .at_least(1)
             .delimited_by(just("("), just(")"))
@@ -76,7 +80,23 @@ fn float_parser() -> impl Parser<char, f64, Error = Simple<char>> {
         .map(|((s, int), digits)| s * format!("{}{}", int, digits).parse::<f64>().unwrap())
 }
 
+fn gate_type_parser() -> impl Parser<char, Vec<ast::GateType>, Error = Simple<char>> {
+    let gate_type = just("CX")
+        .map(|_| ast::GateType::CX)
+        .or(just("T").map(|_| ast::GateType::T))
+        .or(just("PauliRot").map(|_| ast::GateType::CX));
+    gate_type.separated_by(just(",").padded()).at_least(1)
+}
+
 fn impl_block_parser() -> impl Parser<char, ast::ImplBlock, Error = Simple<char>> {
+    let routed_gates = {
+        text::keyword("routed_gates")
+            .padded()
+            .ignore_then(just("="))
+            .padded()
+            .ignore_then(gate_type_parser())
+            .padded()
+    };
     let data = named_tuple_parser();
     let realize = keyword("realize_gate")
         .padded()
@@ -88,13 +108,15 @@ fn impl_block_parser() -> impl Parser<char, ast::ImplBlock, Error = Simple<char>
         .padded()
         .then_ignore(just("["))
         .padded()
-        .ignore_then(data)
+        .ignore_then(routed_gates)
+        .padded()
+        .then(data)
         .padded()
         .then(realize)
         .padded()
         .then_ignore(just("]"))
         .padded()
-        .map(|(data, realize)| ast::ImplBlock { data, realize })
+        .map(|((routed_gates, data), realize)| ast::ImplBlock { routed_gates, data, realize })
 }
 
 fn trans_block_parser() -> impl Parser<char, ast::TransitionBlock, Error = Simple<char>> {
