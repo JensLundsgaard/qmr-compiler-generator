@@ -1,4 +1,5 @@
 GateRealization[
+    routed_gates = CX
     name = 'NisqCnot'
     data = (u : Location, v : Location)
     realize_gate = if Arch.contains_edge((Step.map[Gate.qubits[0]],Step.map[Gate.qubits[1]]))

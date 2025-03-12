@@ -1,6 +1,6 @@
 use crate::structures::*;
 
-use itertools::max;
+use itertools::{max, Itertools};
 use petgraph::graph::NodeIndex;
 use petgraph::Direction::Outgoing;
 use petgraph::Graph;
@@ -10,7 +10,7 @@ use std::collections::{HashMap, HashSet};
 use std::fs::File;
 use std::io::{self, BufRead};
 use std::iter::from_fn;
-use std::os::raw::c_double;
+
 
 #[derive(Debug)]
 pub enum IOError {
@@ -92,6 +92,16 @@ pub fn extract_scmr_gates(filename: &str) -> Circuit {
     }
     return Circuit { gates, qubits };
 }
+
+fn parse_pauli_term(c: char) -> PauliTerm {
+    match c {
+        'I' => PauliTerm::PauliI,
+        'X' => PauliTerm::PauliX,
+        'Y' => PauliTerm::PauliY,
+        'Z' => PauliTerm::PauliZ,
+        _ => panic!("Invalid Pauli term")
+    }
+}
 type GateHandler = Box<dyn FnMut(&regex::Captures, &mut HashSet<Qubit>, usize) -> Gate>;
 
 pub fn extract_gates(filename: &str, gate_types: &[&str]) -> Circuit {
@@ -137,6 +147,47 @@ pub fn extract_gates(filename: &str, gate_types: &[&str]) -> Circuit {
         patterns.push(t_pattern);
     }
 
+    if gate_types.contains(&"Pauli") {
+        let paul_rot_pattern = (
+            Regex::new(r"([IXYZ]+)_\((-?\d+)/(\d+)\);").unwrap(),
+            Box::new(
+                |c: &regex::Captures, qubits: &mut HashSet<Qubit>, id: usize| {
+                    let axis_str = c.get(1).unwrap().as_str();
+                    let numerator = c.get(2).unwrap().as_str().parse::<isize>().unwrap();
+                    let denominator = c.get(3).unwrap().as_str().parse::<usize>().unwrap();
+                    let axis = axis_str.chars().map(parse_pauli_term).collect();
+                    let gate_qubits: Vec<Qubit> = (0..axis_str.len()).map(Qubit::new).collect();
+                    qubits.extend( gate_qubits.iter());
+                    Gate {
+                        gate_type: GateType::PauliRot { axis, angle: (numerator, denominator) },
+                        qubits: gate_qubits,
+                        id,
+                    }
+                },
+            ) as GateHandler,
+        );
+        let paul_meas_pattern = (
+            Regex::new(r"(-?)M_([IXYZ]+);").unwrap(),
+            Box::new(
+                |c: &regex::Captures, qubits: &mut HashSet<Qubit>, id: usize| {
+                    let sign_str = c.get(1).unwrap().as_str();
+                    let sign = sign_str != "-";
+                    let axis_str = c.get(2).unwrap().as_str();
+                    let axis = axis_str.chars().map(parse_pauli_term).collect();
+                    let gate_qubits: Vec<Qubit> = (1..axis_str.len()).filter(|&ind| axis_str.chars().nth(ind).unwrap() != 'I').map(Qubit::new).collect();
+                    qubits.extend( gate_qubits.iter());
+                    Gate {
+                        gate_type: GateType::PauliMeasurement  { sign, axis },
+                        qubits: gate_qubits,
+                        id,
+                    }
+                },
+            ) as GateHandler,
+
+        );
+        patterns.push(paul_rot_pattern);
+        patterns.push(paul_meas_pattern);
+    }
     for line in lines {
         let line_str = line.unwrap();
         for (regex, handler) in &mut patterns {

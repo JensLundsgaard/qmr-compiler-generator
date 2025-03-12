@@ -4,7 +4,7 @@ use serde_json;
 
 
 fn run_raa(circ_path: &str, solve_mode : &str) -> Result<(), IOError> {
-    let circ = utils::extract_scmr_gates(circ_path);
+    let circ = utils::extract_cnots(circ_path);
     let size = (circ.gates.len() as f64).sqrt().ceil() as usize;
     let arch = raa::RaaArchitecture { width : size, height : size};
     let res =   match solve_mode {

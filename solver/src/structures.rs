@@ -46,7 +46,9 @@ impl Location {
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize)]
 pub enum PauliTerm{
+    PauliI,
     PauliX,
+    PauliY,
     PauliZ
 }
 
@@ -54,7 +56,8 @@ pub enum PauliTerm{
 pub enum GateType {
     CX,
     T,
-    PauliRot{axis : Vec<PauliTerm>, angle : (usize, usize)}
+    PauliRot{axis : Vec<PauliTerm>, angle : (isize, usize)}, 
+    PauliMeasurement{sign : bool,  axis : Vec<PauliTerm>},
 }
 
 

@@ -86,7 +86,72 @@ impl MQLSSArchitecture {
 pub struct MQLSSGateImplementation {
     used_nodes: Vec<Location>,
 }
+pub fn compact_layout(alg_qubit_count: usize) -> MQLSSArchitecture {
+    let width = (2 * alg_qubit_count.div_ceil(2)) + 1;
+    let height = 5;
+    let mut alg_qubits = Vec::new();
+    for i in (1..width - 1).step_by(2) {
+        alg_qubits.push(Location::new(width + i));
+        alg_qubits.push(Location::new(i + width * 3));
+    }
+    let mut perimeter = Vec::new();
+    let top_edge = (0..width).map(|i| Location::new(i));
+    let right_edge = (1..height).map(|i| Location::new(i * width + width - 1));
+    let bottom_edge = (0..width - 1)
+        .rev()
+        .map(|i| Location::new(i + width * (height - 1)));
+    let left_edge = (1..height - 1).rev().map(|i| Location::new(i * width));
+    perimeter.extend(top_edge);
+    perimeter.extend(right_edge);
+    perimeter.extend(bottom_edge);
+    perimeter.extend(left_edge);
+    // iterate over every other location on the perimeter
+    let mut magic_state_qubits = Vec::new();
+    for i in (1..perimeter.len()).step_by(2) {
+        magic_state_qubits.push(perimeter[i]);
+    }
+    return MQLSSArchitecture {
+        width,
+        height,
+        alg_qubits,
+        magic_state_qubits,
+    };
+}
 
+pub fn square_sparse_layout(alg_qubit_count: usize) -> MQLSSArchitecture {
+    let agc = alg_qubit_count as f64;
+    let width = 2 * (agc.sqrt().ceil() as usize) + 3;
+    let height = width;
+    let mut alg_qubits = Vec::new();
+    let interior = |coord| coord > 0 && coord < width - 1;
+    for i in 0..width * height {
+        let (x, y) = (i % width, i / width);
+        if interior(x) && interior(y) && x % 2 == 0 && y % 2 == 0 {
+            alg_qubits.push(Location::new(i));
+        }
+    }
+    let mut perimeter = Vec::new();
+    let top_edge = (0..width).map(|i| Location::new(i));
+    let right_edge = (1..height).map(|i| Location::new(i * width + width - 1));
+    let bottom_edge = (0..width - 1)
+        .rev()
+        .map(|i| Location::new(i + width * (height - 1)));
+    let left_edge = (1..height - 1).rev().map(|i| Location::new(i * width));
+    perimeter.extend(top_edge);
+    perimeter.extend(right_edge);
+    perimeter.extend(bottom_edge);
+    perimeter.extend(left_edge);
+    let mut magic_state_qubits = Vec::new();
+    for i in (1..perimeter.len()).step_by(2) {
+        magic_state_qubits.push(perimeter[i]);
+    }
+    return MQLSSArchitecture {
+        width,
+        height,
+        alg_qubits,
+        magic_state_qubits,
+    };
+}
 impl GateImplementation for MQLSSGateImplementation {}
 #[derive(Debug)]
 struct IdTransition;
@@ -147,21 +212,59 @@ fn mqlss_implement_gate(
         loc_to_node.remove(&loc);
     }
     let mut qubit_terminals = vec![];
-    if let GateType::PauliRot{axis, angle} = &gate.gate_type {
-        for i in 0..gate.qubits.len() {
-            let term = match axis[i] {
-                PauliTerm::PauliX => horizontal_neighbors(step.map[&gate.qubits[i]], arch.width),
-                PauliTerm::PauliZ => {
-                    vertical_neighbors(step.map[&gate.qubits[i]], arch.width, arch.height)
+    match &gate.gate_type {
+        GateType::PauliRot { axis, angle } if *angle == (1, 8) || *angle == (-1, 8) => {
+            let msf_neighbors = arch
+                .magic_state_qubits
+                .clone()
+                .into_iter()
+                .map(|m| horizontal_neighbors(m, arch.width))
+                .flatten()
+                .collect();
+            qubit_terminals.push(msf_neighbors);
+            
+            for i in 0..gate.qubits.len() {
+                match axis[i] {
+                    PauliTerm::PauliX => {
+                        qubit_terminals.push(horizontal_neighbors(step.map[&gate.qubits[i]], arch.width));
+                    }
+                    PauliTerm::PauliY => {
+                        qubit_terminals.push(vertical_neighbors(step.map[&gate.qubits[i]], arch.width, arch.height));
+                        qubit_terminals.push(horizontal_neighbors(step.map[&gate.qubits[i]], arch.width));
+                    }
+                    PauliTerm::PauliZ => {
+                        qubit_terminals.push(vertical_neighbors(step.map[&gate.qubits[i]], arch.width, arch.height));
+                    }
+                    PauliTerm::PauliI => {}
                 }
-            };
-            qubit_terminals.push(term);
+            }
         }
-        let terminal_sets = qubit_terminals.into_iter().multi_cartesian_product();
+        GateType::PauliMeasurement { sign: _, axis } => {
+            for i in 0..gate.qubits.len() {
+                match axis[i] {
+                    PauliTerm::PauliX => {
+                        qubit_terminals.push(horizontal_neighbors(step.map[&gate.qubits[i]], arch.width));
+                    }
+                    PauliTerm::PauliY => {
+                        qubit_terminals.push(vertical_neighbors(step.map[&gate.qubits[i]], arch.width, arch.height));
+                        qubit_terminals.push(horizontal_neighbors(step.map[&gate.qubits[i]], arch.width));
+                    }
+                    PauliTerm::PauliZ => {
+                        qubit_terminals.push(vertical_neighbors(step.map[&gate.qubits[i]], arch.width, arch.height));
+                    }
+                    PauliTerm::PauliI => {}
+                }
+            }
+        }
+        _ => {panic!("Tried to do MQLSS with gate {:?}, which is not supported", gate)},
+    }
+        let terminal_sets = qubit_terminals.into_iter().multi_cartesian_product().filter(|v|v.iter().all(|l| loc_to_node.contains_key(l)));
+
         for terminal_set in terminal_sets {
             let indices: Vec<NodeIndex> =
                 terminal_set.into_iter().map(|x| loc_to_node[&x]).collect();
             let steiner_tree_res = steiner_tree(&graph, &indices, |_| Ok::<f64, ()>(1.0));
+
             if let Ok(Some(tree)) = steiner_tree_res {
                 let locations = tree
                     .used_node_indices
@@ -175,7 +278,16 @@ fn mqlss_implement_gate(
             }
         }
         return impls;
-    } else {
-        return impls;
-    }
+}
+
+pub fn mqlss_solve(c: &Circuit, a: &MQLSSArchitecture) -> CompilerResult<MQLSSGateImplementation> {
+    return solve(
+        c,
+        a,
+        &mqlss_transitions,
+        mqlss_implement_gate,
+        mqlsss_step_cost,
+        None,
+        true,
+    );
 }
