@@ -1,6 +1,6 @@
 use crate::structures::*;
 
-use itertools::{max, Itertools};
+use itertools::{max, CombinationsWithReplacement, Itertools};
 use petgraph::graph::NodeIndex;
 use petgraph::Direction::Outgoing;
 use petgraph::Graph;
@@ -10,7 +10,6 @@ use std::collections::{HashMap, HashSet};
 use std::fs::File;
 use std::io::{self, BufRead};
 use std::iter::from_fn;
-
 
 #[derive(Debug)]
 pub enum IOError {
@@ -99,7 +98,7 @@ fn parse_pauli_term(c: char) -> PauliTerm {
         'X' => PauliTerm::PauliX,
         'Y' => PauliTerm::PauliY,
         'Z' => PauliTerm::PauliZ,
-        _ => panic!("Invalid Pauli term")
+        _ => panic!("Invalid Pauli term"),
     }
 }
 type GateHandler = Box<dyn FnMut(&regex::Captures, &mut HashSet<Qubit>, usize) -> Gate>;
@@ -157,9 +156,12 @@ pub fn extract_gates(filename: &str, gate_types: &[&str]) -> Circuit {
                     let denominator = c.get(3).unwrap().as_str().parse::<usize>().unwrap();
                     let axis = axis_str.chars().map(parse_pauli_term).collect();
                     let gate_qubits: Vec<Qubit> = (0..axis_str.len()).map(Qubit::new).collect();
-                    qubits.extend( gate_qubits.iter());
+                    qubits.extend(gate_qubits.iter());
                     Gate {
-                        gate_type: GateType::PauliRot { axis, angle: (numerator, denominator) },
+                        gate_type: GateType::PauliRot {
+                            axis,
+                            angle: (numerator, denominator),
+                        },
                         qubits: gate_qubits,
                         id,
                     }
@@ -174,16 +176,18 @@ pub fn extract_gates(filename: &str, gate_types: &[&str]) -> Circuit {
                     let sign = sign_str != "-";
                     let axis_str = c.get(2).unwrap().as_str();
                     let axis = axis_str.chars().map(parse_pauli_term).collect();
-                    let gate_qubits: Vec<Qubit> = (1..axis_str.len()).filter(|&ind| axis_str.chars().nth(ind).unwrap() != 'I').map(Qubit::new).collect();
-                    qubits.extend( gate_qubits.iter());
+                    let gate_qubits: Vec<Qubit> = (1..axis_str.len())
+                        .filter(|&ind| axis_str.chars().nth(ind).unwrap() != 'I')
+                        .map(Qubit::new)
+                        .collect();
+                    qubits.extend(gate_qubits.iter());
                     Gate {
-                        gate_type: GateType::PauliMeasurement  { sign, axis },
+                        gate_type: GateType::PauliMeasurement { sign, axis },
                         qubits: gate_qubits,
                         id,
                     }
                 },
             ) as GateHandler,
-
         );
         patterns.push(paul_rot_pattern);
         patterns.push(paul_meas_pattern);
@@ -499,4 +503,36 @@ pub fn build_criticality_table(c: &Circuit) -> HashMap<usize, usize> {
         }
     }
     gate_table
+}
+
+pub fn build_interaction_graph(c: &Circuit) -> Graph<Qubit, usize> {
+    let mut nodes = HashMap::new();
+    let mut g = Graph::new();
+    for gate in &c.gates {
+        match &gate.gate_type {
+            GateType::CX => {
+                let (ctrl, tar) = (gate.qubits[0], gate.qubits[1]);
+                if !nodes.contains_key(&ctrl) {
+                    nodes.insert(ctrl, g.add_node(ctrl));
+                }
+                if !nodes.contains_key(&tar) {
+                    nodes.insert(tar, g.add_node(tar));
+                }
+                let (ctrl_loc, tar_loc) = (
+                    nodes
+                        .get(&ctrl)
+                        .expect("fetching control index in interaction graph"),
+                    nodes
+                        .get(&tar)
+                        .expect("fetching target index in interaction graph"),
+                );
+                g.update_edge(*ctrl_loc, *tar_loc, 0);
+                g.update_edge(*tar_loc, *ctrl_loc, 0);
+            }
+            GateType::T => todo!(),
+            GateType::PauliRot { axis, angle } => todo!(),
+            GateType::PauliMeasurement { sign, axis } => todo!(),
+        }
+    }
+    return g;
 }

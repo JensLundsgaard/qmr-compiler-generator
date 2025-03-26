@@ -184,10 +184,8 @@ impl<G: GateImplementation> Step<G> {
         for order in orders {
             for gate in order {
                 let mut seen = HashSet::new();
-                println!("{:?}", gate);
                 for implementation in implement_gate(self, arch, &gate).into_iter() {
                     let seen = seen.insert(implementation.clone());
-                    println!("{:?}", implementation);
                     assert!(seen);
                     if !self.gates().contains(&gate) {
                         self.implemented_gates.insert(ImplementedGate {

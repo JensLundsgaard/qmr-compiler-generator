@@ -1,3 +1,6 @@
+use petgraph::algo::is_isomorphic_subgraph;
+use petgraph::algo::subgraph_isomorphisms_iter;
+use petgraph::graph::NodeIndex;
 use rand::seq::IndexedRandom;
 
 use crate::structures::*;
@@ -8,6 +11,9 @@ const ALPHA: f64 = 1.0;
 const BETA: f64 = 1.0;
 const GAMMA: f64 = 1.0;
 const DELTA: f64 = 1.0;
+const INITIAL_TEMP: f64 = 10.0;
+const TERM_TEMP: f64 = 0.00001;
+const COOL_RATE: f64 = 0.99;
 const SABRE_ITERATIONS: usize = 3;
 
 fn random_map<T: Architecture>(c: &Circuit, arch: &T) -> QubitMap {
@@ -19,6 +25,25 @@ fn random_map<T: Architecture>(c: &Circuit, arch: &T) -> QubitMap {
         map.insert(*q, *l);
     }
     return map;
+}
+
+fn isomorphism_map<T: Architecture>(c: &Circuit, arch: &T) -> Option<QubitMap> {
+    let interact_graph = build_interaction_graph(c);
+    println!("{:?}", interact_graph);
+
+    let (graph, loc_to_node) = arch.graph();
+    println!("{:?}", graph);
+    let isom =
+        subgraph_isomorphisms_iter(&&interact_graph, &&graph, &mut |_, _| true, &mut |_, _| {
+            true
+        })?
+        .next();
+    isom.map(|v| {
+        v.iter()
+            .enumerate()
+            .map(|(q, i)| (interact_graph[NodeIndex::new(q)], graph[NodeIndex::new(*i)]))
+            .collect()
+    })
 }
 
 fn simulated_anneal<T: Clone>(
@@ -243,8 +268,25 @@ pub fn solve<
         Some(heuristic) => {
             let map_h = |m: &QubitMap| heuristic(arch, c, m);
             let route_h = |c: &Circuit, m: &QubitMap| heuristic(arch, c, m);
-            let map =
-                sim_anneal_mapping_search(random_map(c, arch), arch, 10000.0, 0.00001, 0.99, map_h);
+            let isom_map = isomorphism_map(c, arch);
+            println!("{:?}", isom_map);
+            let isom_cost = isom_map.clone().map(|x| map_h(&x));
+            let sa_map = match isom_cost {
+                Some(c) if c == 0.0 => None,
+                _ => Some(sim_anneal_mapping_search(
+                    random_map(c, arch),
+                    arch,
+                    INITIAL_TEMP,
+                    TERM_TEMP,
+                    COOL_RATE,
+                    map_h,
+                )),
+            };
+            let sa_cost = sa_map.clone().map(|x| map_h(&x));
+            let map = match (isom_cost, sa_cost) {
+                (Some(i_c), Some(s_c)) if i_c < s_c => isom_map.unwrap(),
+                _ => sa_map.unwrap(),
+            };
             return route(
                 c,
                 arch,
@@ -292,7 +334,25 @@ pub fn sabre_solve<
     let mut map = match mapping_heuristic {
         Some(heuristic) => {
             let map_h = |m: &QubitMap| heuristic(arch, c, m);
-            sim_anneal_mapping_search(random_map(c, arch), arch, 1000.0, 0.0001, 0.99, map_h)
+            let isom_map = isomorphism_map(c, arch);
+
+            let isom_cost = isom_map.clone().map(|x| map_h(&x));
+            let sa_map = match isom_cost {
+                Some(c) if c == 0.0 => None,
+                _ => Some(sim_anneal_mapping_search(
+                    random_map(c, arch),
+                    arch,
+                    INITIAL_TEMP,
+                    TERM_TEMP,
+                    COOL_RATE,
+                    map_h,
+                )),
+            };
+            let sa_cost = sa_map.clone().map(|x| map_h(&x));
+            match (isom_cost, sa_cost) {
+                (Some(i_c), Some(s_c)) if i_c < s_c => isom_map.unwrap(),
+                _ => sa_map.unwrap(),
+            }
         }
         None => random_map(c, arch),
     };

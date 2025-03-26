@@ -124,9 +124,12 @@ fn mapping_heuristic(arch: &NisqArchitecture, c: &Circuit, map: &HashMap<Qubit, 
     for gate in &c.gates {
         let (cpos, tpos) = (map.get(&gate.qubits[0]), map.get(&gate.qubits[1]));
         let (cind, tind) = (arch.index_map[cpos.unwrap()], arch.index_map[tpos.unwrap()]);
-        let sp_res = petgraph::algo::astar(graph, cind, |n| n == tind, |_| 1, |_| 1);
+        let sp_res = petgraph::algo::astar(graph, cind, |n| n == tind, |_| 1, |_| 0);
+
         match sp_res {
-            Some((c, _)) => cost += c,
+            Some((c, _)) => {cost += c;
+                //  println!("gate: {:?}, distance {:?}", gate, c)
+                 }
             None => panic!(
                 "Disconnected graph. No path found from {:?} to {:?}",
                 cpos, tpos
@@ -135,6 +138,7 @@ fn mapping_heuristic(arch: &NisqArchitecture, c: &Circuit, map: &HashMap<Qubit, 
     }
     return cost as f64;
 }
+
 
 pub fn nisq_solve_sabre(
     c: &Circuit,
