@@ -34,16 +34,15 @@ fn isomorphism_map<T: Architecture>(c: &Circuit, arch: &T) -> Option<QubitMap> {
     let (graph, loc_to_node) = arch.graph();
     println!("{:?}", graph);
     let isom =
-        subgraph_isomorphisms_iter(&&interact_graph, &&graph, &mut |_, _| true, &mut |_, _| {
-            true
-        })?
-        .next();
+        vf2::subgraph_isomorphisms(&interact_graph, &graph).first();
+    println!("done finding");
     isom.map(|v| {
         v.iter()
             .enumerate()
             .map(|(q, i)| (interact_graph[NodeIndex::new(q)], graph[NodeIndex::new(*i)]))
             .collect()
     })
+
 }
 
 fn simulated_anneal<T: Clone>(

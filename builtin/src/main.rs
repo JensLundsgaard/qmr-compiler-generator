@@ -2,7 +2,7 @@ use builtin::{nisq, raa, scmr, mqlss};
 use solver::utils;
 
 fn nisq_test() {
-    let circ = utils::extract_cnots("/home/abtin/qmrsl/circuits/wstate_indep_qiskit_40.qasm");
+    let circ = utils::extract_cnots("/home/abtin/qmrsl/circuits/pf1_30.qasm");
     let g = utils::graph_from_file("/home/abtin/qmrsl/arch.txt");
     let arch = nisq::NisqArchitecture::new(g);
     let res =  nisq::nisq_solve(&circ, &arch);

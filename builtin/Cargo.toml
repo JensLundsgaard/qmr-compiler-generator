@@ -10,3 +10,4 @@ rustworkx-core = "0.16.0"
 serde = "1.0.217"
 serde_json = "1.0.138"
 solver = { path = "../solver" }
+
