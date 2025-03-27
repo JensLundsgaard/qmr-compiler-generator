@@ -10,6 +10,7 @@ use std::{
     collections::{HashMap, HashSet},
     iter::empty,
 };
+#[derive(Clone)]
 pub struct MQLSSArchitecture {
     pub width: usize,
     pub height: usize,

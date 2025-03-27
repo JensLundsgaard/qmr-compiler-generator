@@ -3,7 +3,7 @@ use serde::Serialize;
 use solver::backend::{sabre_solve, solve};
 use solver::structures::*;
 use std::collections::{HashMap, HashSet};
-
+#[derive(Clone)]
 pub struct NisqArchitecture {
     graph: Graph<Location, ()>,
     index_map: HashMap<Location, NodeIndex>,

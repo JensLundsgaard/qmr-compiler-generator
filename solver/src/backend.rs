@@ -6,6 +6,9 @@ use rand::seq::IndexedRandom;
 use crate::structures::*;
 use crate::utils::*;
 use std::collections::HashSet;
+use std::sync::mpsc;
+use std::thread;
+use std::time::Duration;
 use std::{collections::HashMap, fmt::Debug};
 const ALPHA: f64 = 1.0;
 const BETA: f64 = 1.0;
@@ -29,13 +32,9 @@ fn random_map<T: Architecture>(c: &Circuit, arch: &T) -> QubitMap {
 
 fn isomorphism_map<T: Architecture>(c: &Circuit, arch: &T) -> Option<QubitMap> {
     let interact_graph = build_interaction_graph(c);
-    println!("{:?}", interact_graph);
-
     let (graph, loc_to_node) = arch.graph();
-    println!("{:?}", graph);
     let isom =
         vf2::subgraph_isomorphisms(&interact_graph, &graph).first();
-    println!("done finding");
     isom.map(|v| {
         v.iter()
             .enumerate()
@@ -43,6 +42,25 @@ fn isomorphism_map<T: Architecture>(c: &Circuit, arch: &T) -> Option<QubitMap> {
             .collect()
     })
 
+}
+
+fn isomorphism_map_with_timeout<T: Architecture + Send + Sync + Clone + 'static>(
+    c: &Circuit, 
+    arch: &T, 
+    timeout: Duration
+) -> Option<QubitMap> {
+    let (tx, rx) = std::sync::mpsc::channel();
+    let c_clone = c.clone(); 
+    let arch_clone = arch.clone(); 
+    thread::spawn(move || {
+        let result = isomorphism_map(&c_clone, &arch_clone);
+        let _ = tx.send(result);
+    });
+
+    match rx.recv_timeout(timeout) {
+        Ok(res) => res,
+        Err(_) => None,
+    }
 }
 
 fn simulated_anneal<T: Clone>(
@@ -249,7 +267,7 @@ fn find_best_next_step<
 }
 
 pub fn solve<
-    A: Architecture,
+    A: Architecture+ Send + Sync + Clone + 'static,
     R: Transition<G, A> + Debug,
     G: GateImplementation + Debug,
     I: IntoIterator<Item = G>,
@@ -267,7 +285,7 @@ pub fn solve<
         Some(heuristic) => {
             let map_h = |m: &QubitMap| heuristic(arch, c, m);
             let route_h = |c: &Circuit, m: &QubitMap| heuristic(arch, c, m);
-            let isom_map = isomorphism_map(c, arch);
+            let isom_map = isomorphism_map_with_timeout(c, arch, Duration::from_secs(3));
             println!("{:?}", isom_map);
             let isom_cost = isom_map.clone().map(|x| map_h(&x));
             let sa_map = match isom_cost {

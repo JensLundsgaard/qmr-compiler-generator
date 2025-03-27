@@ -8,6 +8,8 @@ const ATOM_TRANSFER_TIME: f64 = 15.0e-6;
 const EXCITEMENT_FIDELITY: f64 = 0.9975;
 const RYDBERG_RADIUS: f64 = 6.0e-6;
 const T2: f64 = 1.5;
+
+#[derive(Clone)]
 pub struct RaaArchitecture {
     pub width: usize,
     pub height: usize,
