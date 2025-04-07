@@ -1,6 +1,6 @@
 use crate::structures::*;
 
-use itertools::{max, CombinationsWithReplacement, Itertools};
+use itertools::max;
 use petgraph::graph::NodeIndex;
 use petgraph::Direction::Outgoing;
 use petgraph::Graph;

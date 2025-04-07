@@ -187,6 +187,7 @@ fn emit_define_arch_struct(arch: &Option<ArchitectureBlock>) -> TokenStream {
     };
     let arch_name = syn::Ident::new("CustomArch", Span::call_site());
     quote! {
+            #[derive(Clone)]
             struct #arch_name {
                 graph: Graph<Location, ()>,
                 index_map: HashMap<Location, NodeIndex>,

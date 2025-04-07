@@ -1,12 +1,9 @@
-use petgraph::algo::is_isomorphic_subgraph;
-use petgraph::algo::subgraph_isomorphisms_iter;
 use petgraph::graph::NodeIndex;
 use rand::seq::IndexedRandom;
 
 use crate::structures::*;
 use crate::utils::*;
 use std::collections::HashSet;
-use std::sync::mpsc;
 use std::thread;
 use std::time::Duration;
 use std::{collections::HashMap, fmt::Debug};
@@ -18,6 +15,7 @@ const INITIAL_TEMP: f64 = 10.0;
 const TERM_TEMP: f64 = 0.00001;
 const COOL_RATE: f64 = 0.99;
 const SABRE_ITERATIONS: usize = 3;
+const ISOM_SEARCH_TIMEOUT : Duration = Duration::from_secs(300);
 
 fn random_map<T: Architecture>(c: &Circuit, arch: &T) -> QubitMap {
     let mut map = HashMap::new();
@@ -33,25 +31,23 @@ fn random_map<T: Architecture>(c: &Circuit, arch: &T) -> QubitMap {
 fn isomorphism_map<T: Architecture>(c: &Circuit, arch: &T) -> Option<QubitMap> {
     let interact_graph = build_interaction_graph(c);
     let (graph, loc_to_node) = arch.graph();
-    let isom =
-        vf2::subgraph_isomorphisms(&interact_graph, &graph).first();
+    let isom = vf2::subgraph_isomorphisms(&interact_graph, &graph).first();
     isom.map(|v| {
         v.iter()
             .enumerate()
             .map(|(q, i)| (interact_graph[NodeIndex::new(q)], graph[NodeIndex::new(*i)]))
             .collect()
     })
-
 }
 
 fn isomorphism_map_with_timeout<T: Architecture + Send + Sync + Clone + 'static>(
-    c: &Circuit, 
-    arch: &T, 
-    timeout: Duration
+    c: &Circuit,
+    arch: &T,
+    timeout: Duration,
 ) -> Option<QubitMap> {
     let (tx, rx) = std::sync::mpsc::channel();
-    let c_clone = c.clone(); 
-    let arch_clone = arch.clone(); 
+    let c_clone = c.clone();
+    let arch_clone = arch.clone();
     thread::spawn(move || {
         let result = isomorphism_map(&c_clone, &arch_clone);
         let _ = tx.send(result);
@@ -267,7 +263,7 @@ fn find_best_next_step<
 }
 
 pub fn solve<
-    A: Architecture+ Send + Sync + Clone + 'static,
+    A: Architecture + Send + Sync + Clone + 'static,
     R: Transition<G, A> + Debug,
     G: GateImplementation + Debug,
     I: IntoIterator<Item = G>,
@@ -285,8 +281,7 @@ pub fn solve<
         Some(heuristic) => {
             let map_h = |m: &QubitMap| heuristic(arch, c, m);
             let route_h = |c: &Circuit, m: &QubitMap| heuristic(arch, c, m);
-            let isom_map = isomorphism_map_with_timeout(c, arch, Duration::from_secs(3));
-            println!("{:?}", isom_map);
+            let isom_map = isomorphism_map_with_timeout(c, arch, ISOM_SEARCH_TIMEOUT);
             let isom_cost = isom_map.clone().map(|x| map_h(&x));
             let sa_map = match isom_cost {
                 Some(c) if c == 0.0 => None,

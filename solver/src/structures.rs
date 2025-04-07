@@ -6,10 +6,7 @@ use serde::Serialize;
 use std::fmt::Debug;
 use std::hash::Hash;
 use std::ops::Index;
-use std::{
-    collections::{HashMap, HashSet},
-    fmt,
-};
+use std::collections::{HashMap, HashSet};
 
 #[derive(Hash, PartialEq, Eq, Clone, Copy, Debug, Serialize)]
 pub struct Qubit(usize);
