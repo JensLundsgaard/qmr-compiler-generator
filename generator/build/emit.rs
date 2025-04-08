@@ -146,8 +146,8 @@ fn emit_define_struct(data: &NamedTuple) -> TokenStream {
 fn emit_gate_type(g: &GateType) -> TokenStream {
     match g {
         GateType::CX => quote! {"CX"},
-        GateType::T => quote! {"CX"},
-        GateType::PauliRot => quote! {"PauliRot"},
+        GateType::T => quote! {"T"},
+        GateType::Pauli => quote! {"Pauli"},
     }
 }
 

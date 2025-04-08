@@ -1,12 +1,18 @@
 use serde::Serialize;
 
-use solver::{backend::{sabre_solve, solve}, structures::*};
+use solver::{
+    backend::{sabre_solve, solve},
+    structures::*,
+};
 use std::collections::{HashMap, HashSet};
 
 const ACCELERATION_CONST: f64 = 2750.0;
+const ATOM_TRANSFER_FIDELITY: f64 = 0.999;
 const ATOM_TRANSFER_TIME: f64 = 15.0e-6;
+
 const EXCITEMENT_FIDELITY: f64 = 0.9975;
 const RYDBERG_RADIUS: f64 = 6.0e-6;
+const TWO_QUBIT_GATE_FIDELITY: f64 = 0.995;
 const T2: f64 = 1.5;
 
 #[derive(Clone)]
@@ -99,7 +105,7 @@ impl Transition<RaaGateImplementation, RaaArchitecture> for IdTransition {
         return "id".to_string();
     }
 
-    fn cost(&self, _arch : &RaaArchitecture) -> f64 {
+    fn cost(&self, _arch: &RaaArchitecture) -> f64 {
         0.0
     }
 }
@@ -125,7 +131,7 @@ impl Transition<RaaGateImplementation, RaaArchitecture> for RaaMove {
         format!("RELOCATE {:?} {:?}", self.qubit, self.dst)
     }
 
-    fn cost(&self, _arch : &RaaArchitecture) -> f64 {
+    fn cost(&self, _arch: &RaaArchitecture) -> f64 {
         self.cost
     }
 }
@@ -279,7 +285,8 @@ fn raa_implement_gate(
             src: step.map[&gate.qubits[0]],
             dst: step.map[&gate.qubits[1]],
         });
-    }  if consistent(move_tar_to_ctrl, &row_displacements, &col_displacements) {
+    }
+    if consistent(move_tar_to_ctrl, &row_displacements, &col_displacements) {
         v.push(RaaGateImplementation {
             src: step.map[&gate.qubits[1]],
             dst: step.map[&gate.qubits[0]],
@@ -313,9 +320,15 @@ fn raa_step_cost(step: &RaaStep, arch: &RaaArchitecture) -> f64 {
     let active_qubits: HashSet<&Qubit> = gates.iter().flat_map(|g| &g.qubits).collect();
     let active_qubit_count = active_qubits.len();
     let inactive_qubit_count = step.map.len() - active_qubit_count;
+    // two qubit gate fidelity term
+    cost += -f64::ln(TWO_QUBIT_GATE_FIDELITY) * (gates.len() as f64);
+    // atom transfer
+    cost += -f64::ln(ATOM_TRANSFER_FIDELITY) * (active_qubit_count as f64);
+    // decoherence for active qubits
     for _ in 1..active_qubit_count {
         cost += -f64::ln(1.0 - (move_time / T2));
     }
+    // decoherence for inactive qubits + excited but not gate
     for _ in 1..inactive_qubit_count {
         cost += -f64::ln(1.0 - (move_time + 4.0 * ATOM_TRANSFER_TIME) / T2);
         cost += -f64::ln(EXCITEMENT_FIDELITY);
@@ -335,7 +348,10 @@ pub fn raa_solve(c: &Circuit, arch: &RaaArchitecture) -> CompilerResult<RaaGateI
     )
 }
 
-pub fn raa_solve_sabre(c: &Circuit, arch: &RaaArchitecture) -> CompilerResult<RaaGateImplementation> {
+pub fn raa_solve_sabre(
+    c: &Circuit,
+    arch: &RaaArchitecture,
+) -> CompilerResult<RaaGateImplementation> {
     sabre_solve(
         c,
         arch,

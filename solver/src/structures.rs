@@ -1,12 +1,20 @@
+use crate::utils::simulated_anneal;
+use crate::utils::swap_random_array_elements;
 use itertools::Itertools;
 use petgraph::graph::NodeIndex;
 use petgraph::Graph;
 use serde::Deserialize;
 use serde::Serialize;
+use std::collections::{HashMap, HashSet};
 use std::fmt::Debug;
 use std::hash::Hash;
 use std::ops::Index;
-use std::collections::{HashMap, HashSet};
+
+const INITIAL_TEMP: f64 = 10.0;
+const TERM_TEMP: f64 = 0.00001;
+const COOL_RATE: f64 = 0.99;
+
+const EXHAUSTIVE_EXPLORATION_THRESHOLD: usize = 8;
 
 #[derive(Hash, PartialEq, Eq, Clone, Copy, Debug, Serialize)]
 pub struct Qubit(usize);
@@ -42,21 +50,26 @@ impl Location {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize)]
-pub enum PauliTerm{
+pub enum PauliTerm {
     PauliI,
     PauliX,
     PauliY,
-    PauliZ
+    PauliZ,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize)]
 pub enum GateType {
     CX,
     T,
-    PauliRot{axis : Vec<PauliTerm>, angle : (isize, usize)}, 
-    PauliMeasurement{sign : bool,  axis : Vec<PauliTerm>},
+    PauliRot {
+        axis: Vec<PauliTerm>,
+        angle: (isize, usize),
+    },
+    PauliMeasurement {
+        sign: bool,
+        axis: Vec<PauliTerm>,
+    },
 }
-
 
 #[derive(Clone, Debug, Eq, Hash, Serialize)]
 pub struct Gate {
@@ -151,22 +164,52 @@ impl<G: GateImplementation> Step<G> {
         assert!(self.implemented_gates.is_empty());
         let mut best_total_criticality = 0;
         let orders = executable.iter().cloned().permutations(executable.len());
-        for order in orders {
+        if executable.len() < EXHAUSTIVE_EXPLORATION_THRESHOLD {
+            for order in orders {
+                let mut step = Step {
+                    map: self.map.clone(),
+                    implemented_gates: HashSet::new(),
+                };
+                step.max_step(&order, arch, &implement_gate);
+                let candidate_total_criticality: usize =
+                    step.gates().into_iter().map(|x| crit_table[&x.id]).sum();
+
+                if candidate_total_criticality > best_total_criticality {
+                    *self = step;
+                    best_total_criticality = candidate_total_criticality;
+                }
+                if self.implemented_gates.len() == executable.len() {
+                    return;
+                }
+            }
+        } else {
+            let cost_function = |order: &Vec<Gate>| {
+                let mut step = Step {
+                    map: self.map.clone(),
+                    implemented_gates: HashSet::new(),
+                };
+                step.max_step(&order, arch, &implement_gate);
+                return step
+                    .gates()
+                    .into_iter()
+                    .map(|x| crit_table[&x.id])
+                    .sum::<usize>() as f64;
+            };
+            let random_neighbor = swap_random_array_elements;
+            let best_order = simulated_anneal(
+                executable.clone(),
+                INITIAL_TEMP,
+                TERM_TEMP,
+                COOL_RATE,
+                random_neighbor,
+                cost_function,
+            );
             let mut step = Step {
                 map: self.map.clone(),
                 implemented_gates: HashSet::new(),
             };
-            step.max_step(&order, arch, &implement_gate);
-            let candidate_total_criticality: usize =
-                step.gates().into_iter().map(|x| crit_table[&x.id]).sum();
-
-            if candidate_total_criticality > best_total_criticality {
-                *self = step;
-                best_total_criticality = candidate_total_criticality;
-            }
-            if self.implemented_gates.len() == executable.len() {
-                return;
-            }
+            step.max_step(&best_order, arch, &implement_gate);
+            *self = step;
         }
     }
 

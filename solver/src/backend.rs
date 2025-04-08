@@ -59,38 +59,7 @@ fn isomorphism_map_with_timeout<T: Architecture + Send + Sync + Clone + 'static>
     }
 }
 
-fn simulated_anneal<T: Clone>(
-    start: T,
-    initial_temp: f64,
-    term_temp: f64,
-    cool_rate: f64,
-    random_neighbor: impl Fn(&T) -> T,
-    cost_function: impl Fn(&T) -> f64,
-) -> T {
-    let mut best = start.clone();
-    let mut best_cost = cost_function(&best);
-    let mut current = start.clone();
-    let mut curr_cost = cost_function(&current);
-    let mut temp = initial_temp;
-    while temp > term_temp {
-        let next = random_neighbor(&current);
-        let next_cost = cost_function(&next);
-        let delta_curr = next_cost - curr_cost;
-        let delta_best = next_cost - best_cost;
-        let rand: f64 = rand::random();
-        if delta_best < 0.0 {
-            best = next.clone();
-            best_cost = next_cost;
-            current = next;
-            curr_cost = next_cost;
-        } else if rand < (-delta_curr / temp).exp() {
-            current = next;
-            curr_cost = next_cost;
-        }
-        temp *= cool_rate;
-    }
-    return best;
-}
+
 
 fn random_neighbor<T: Architecture>(map: &QubitMap, arch: &T) -> QubitMap {
     let mut moves: Vec<Box<dyn Fn(&QubitMap) -> QubitMap>> = Vec::new();

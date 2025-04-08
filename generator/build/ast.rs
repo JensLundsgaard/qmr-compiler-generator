@@ -9,7 +9,7 @@ pub struct ProblemDefinition {
 pub enum GateType {
     CX,
     T,
-    PauliRot,
+    Pauli,
 }
 #[derive(Debug)]
 pub struct ImplBlock {
