@@ -1,9 +1,10 @@
 use crate::structures::*;
 
-use itertools::max;
+use itertools::{max, Itertools};
 use petgraph::graph::NodeIndex;
 use petgraph::Direction::Outgoing;
 use petgraph::Graph;
+use rustworkx_core::steiner_tree::steiner_tree;
 use rand::Rng;
 use regex::Regex;
 use serde_json::Value;
@@ -488,6 +489,40 @@ pub fn all_paths<A: Architecture>(
         }
         None
     })
+}
+
+fn steiner_trees<A: Architecture>(
+    arch: &A,
+    terminals : Vec<Vec<Location>>,
+    blocked: Vec<Location>,
+) -> impl IntoIterator<Item = Vec<Location>> {
+    let (mut graph, mut loc_to_node) = arch.graph();
+    for loc in blocked.iter() {
+        let old_last = graph[graph.node_indices().last().unwrap()];
+        graph.remove_node(loc_to_node[loc]);
+        loc_to_node.insert(old_last, loc_to_node[loc]);
+        loc_to_node.remove(loc);
+    }
+    let terminal_sets = terminals.into_iter().multi_cartesian_product().filter(|v|v.iter().all(|l| loc_to_node.contains_key(l)));
+    let mut impls = vec![];
+    for terminal_set in terminal_sets {
+        let indices: Vec<NodeIndex> =
+            terminal_set.into_iter().map(|x| loc_to_node[&x]).collect();
+        let steiner_tree_res = steiner_tree(&graph, &indices, |_| Ok::<f64, ()>(1.0));
+
+        if let Ok(Some(tree)) = steiner_tree_res {
+            let locations = tree
+                .used_node_indices
+                .into_iter()
+                .map(|n| &graph[NodeIndex::new(n)])
+                .cloned()
+                .collect();
+            impls.push(locations);
+        }
+    }
+    return impls;
+
+
 }
 
 pub fn build_criticality_table(c: &Circuit) -> HashMap<usize, usize> {

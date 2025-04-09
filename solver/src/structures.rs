@@ -78,6 +78,52 @@ pub struct Gate {
     pub id: usize,
 }
 
+impl Gate {
+    pub fn x_indices(&self) -> Vec<Qubit> {
+        match &self.gate_type {
+            GateType::CX => vec![],
+            GateType::T => vec![],
+            GateType::PauliRot { axis, angle } => (0..axis.len())
+                .filter(|i| axis[*i] == PauliTerm::PauliX)
+                .map(Qubit::new)
+                .collect(),
+            GateType::PauliMeasurement { sign, axis } => (0..axis.len())
+                .filter(|i| axis[*i] == PauliTerm::PauliX)
+                .map(Qubit::new)
+                .collect(),
+        }
+    }
+    pub fn y_indices(&self) -> Vec<Qubit> {
+        match &self.gate_type {
+            GateType::CX => vec![],
+            GateType::T => vec![],
+            GateType::PauliRot { axis, angle } => (0..axis.len())
+                .filter(|i| axis[*i] == PauliTerm::PauliY)
+                .map(Qubit::new)
+                .collect(),
+            GateType::PauliMeasurement { sign, axis } => (0..axis.len())
+                .filter(|i| axis[*i] == PauliTerm::PauliY)
+                .map(Qubit::new)
+                .collect(),
+        }
+    }
+
+    pub fn z_indices(&self) -> Vec<Qubit> {
+        match &self.gate_type {
+            GateType::CX => vec![],
+            GateType::T => vec![],
+            GateType::PauliRot { axis, angle } => (0..axis.len())
+                .filter(|i| axis[*i] == PauliTerm::PauliZ)
+                .map(Qubit::new)
+                .collect(),
+            GateType::PauliMeasurement { sign, axis } => (0..axis.len())
+                .filter(|i| axis[*i] == PauliTerm::PauliZ)
+                .map(Qubit::new)
+                .collect(),
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct Circuit {
     pub gates: Vec<Gate>,
