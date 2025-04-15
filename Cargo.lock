@@ -590,6 +590,7 @@ dependencies = [
  "petgraph",
  "rand 0.9.0",
  "regex",
+ "rustworkx-core",
  "serde",
  "serde_json",
  "vf2",

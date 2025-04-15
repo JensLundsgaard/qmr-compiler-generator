@@ -200,15 +200,15 @@ fn scmr_implement_gate(
         loc_to_node.insert(old_last, loc_to_node[&loc]);
         loc_to_node.remove(&loc);
     }
-    let (starts, ends) = match &gate.gate_type {
-        GateType::CX => {
+    let (starts, ends) = match &gate.operation {
+        Operation::CX => {
             let (cpos, tpos) = (step.map[&gate.qubits[0]], step.map[&gate.qubits[1]]);
             (
                 vertical_neighbors(cpos, arch.width, arch.height),
                 horizontal_neighbors(tpos, arch.width),
             )
         }
-        GateType::T => {
+        Operation::T => {
             let pos = step.map[&gate.qubits[0]];
             let target_neighbors = vertical_neighbors(pos, arch.width, arch.height);
             let msf_neighors = arch
@@ -265,15 +265,15 @@ fn scmr_implement_gate_alt(
         .chain(magic_states.into_iter())
         .chain(paths.into_iter())
         .collect();
-    let (starts, ends) = match &gate.gate_type {
-        GateType::CX => {
+    let (starts, ends) = match &gate.operation {
+        Operation::CX => {
             let (cpos, tpos) = (step.map[&gate.qubits[0]], step.map[&gate.qubits[1]]);
             (
                 vertical_neighbors(cpos, arch.width, arch.height),
                 horizontal_neighbors(tpos, arch.width),
             )
         }
-        GateType::T => {
+        Operation::T => {
             let pos = step.map[&gate.qubits[0]];
             let target_neighbors = vertical_neighbors(pos, arch.width, arch.height);
             let msf_neighors = arch

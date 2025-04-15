@@ -15,7 +15,7 @@ const INITIAL_TEMP: f64 = 10.0;
 const TERM_TEMP: f64 = 0.00001;
 const COOL_RATE: f64 = 0.99;
 const SABRE_ITERATIONS: usize = 3;
-const ISOM_SEARCH_TIMEOUT : Duration = Duration::from_secs(300);
+const ISOM_SEARCH_TIMEOUT: Duration = Duration::from_secs(300);
 
 fn random_map<T: Architecture>(c: &Circuit, arch: &T) -> QubitMap {
     let mut map = HashMap::new();
@@ -50,6 +50,47 @@ fn isomorphism_map_with_timeout<T: Architecture + Send + Sync + Clone + 'static>
     let arch_clone = arch.clone();
     thread::spawn(move || {
         let result = isomorphism_map(&c_clone, &arch_clone);
+        let _ = tx.send(result);
+    });
+
+    match rx.recv_timeout(timeout) {
+        Ok(res) => res,
+        Err(_) => None,
+    }
+}
+
+
+
+
+fn incremental_isomorphism_map<T: Architecture>(c: &Circuit, arch: &T) -> Option<QubitMap> {
+    let mut gates = &c.gates[..1];
+    let mut prefix_circuit = circuit_from_gates(gates.to_vec());
+    let mut isom_map = None;
+    let mut candidate   =  isomorphism_map(&prefix_circuit, arch);
+    let mut i = 1;
+    while candidate.is_some() && i < c.gates.len(){
+        gates = &c.gates[..i];
+        prefix_circuit = circuit_from_gates(gates.to_vec());
+        candidate = isomorphism_map(&prefix_circuit, arch);
+        if candidate.is_some(){
+            isom_map = candidate.clone();
+        }
+        i += 1;
+
+    }
+    return isom_map;
+}
+
+fn incremental_isomorphism_map_with_timeout<T: Architecture + Send + Sync + Clone + 'static>(
+    c: &Circuit,
+    arch: &T,
+    timeout: Duration,
+) -> Option<QubitMap> {
+    let (tx, rx) = std::sync::mpsc::channel();
+    let c_clone = c.clone();
+    let arch_clone = arch.clone();
+    thread::spawn(move || {
+        let result = incremental_isomorphism_map(&c_clone, &arch_clone);
         let _ = tx.send(result);
     });
 
@@ -245,17 +286,19 @@ pub fn solve<
     mapping_heuristic: Option<fn(&A, &Circuit, &QubitMap) -> f64>,
     explore_routing_orders: bool,
 ) -> CompilerResult<G> {
+    println!("{:?}", c);
     let crit_table = &build_criticality_table(c);
     match mapping_heuristic {
         Some(heuristic) => {
             let map_h = |m: &QubitMap| heuristic(arch, c, m);
             let route_h = |c: &Circuit, m: &QubitMap| heuristic(arch, c, m);
-            let isom_map = isomorphism_map_with_timeout(c, arch, ISOM_SEARCH_TIMEOUT);
+            let isom_map = incremental_isomorphism_map_with_timeout(c, arch, ISOM_SEARCH_TIMEOUT);
             let isom_cost = isom_map.clone().map(|x| map_h(&x));
+            println!("made it past isom");
             let sa_map = match isom_cost {
                 Some(c) if c == 0.0 => None,
                 _ => Some(sim_anneal_mapping_search(
-                    random_map(c, arch),
+                    isom_map.clone().unwrap_or_else(|| random_map(c, arch)),
                     arch,
                     INITIAL_TEMP,
                     TERM_TEMP,

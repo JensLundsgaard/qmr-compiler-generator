@@ -1,0 +1,414 @@
+{
+    "steps": [
+        {
+            "map": {
+                "0": 3,
+                "2": 2,
+                "1": 1
+            },
+            "implemented_gates": [
+                {
+                    "gate": {
+                        "gate_type": "CX",
+                        "qubits": [
+                            0,
+                            2
+                        ],
+                        "id": 0
+                    },
+                    "implementation": {
+                        "u": 3,
+                        "v": 2
+                    }
+                }
+            ]
+        },
+        {
+            "map": {
+                "0": 3,
+                "2": 2,
+                "1": 1
+            },
+            "implemented_gates": [
+                {
+                    "gate": {
+                        "gate_type": "CX",
+                        "qubits": [
+                            2,
+                            1
+                        ],
+                        "id": 1
+                    },
+                    "implementation": {
+                        "u": 2,
+                        "v": 1
+                    }
+                }
+            ]
+        },
+        {
+            "map": {
+                "0": 3,
+                "2": 2,
+                "1": 1
+            },
+            "implemented_gates": [
+                {
+                    "gate": {
+                        "gate_type": "CX",
+                        "qubits": [
+                            2,
+                            1
+                        ],
+                        "id": 2
+                    },
+                    "implementation": {
+                        "u": 2,
+                        "v": 1
+                    }
+                }
+            ]
+        },
+        {
+            "map": {
+                "0": 3,
+                "2": 2,
+                "1": 1
+            },
+            "implemented_gates": [
+                {
+                    "gate": {
+                        "gate_type": "CX",
+                        "qubits": [
+                            0,
+                            2
+                        ],
+                        "id": 3
+                    },
+                    "implementation": {
+                        "u": 3,
+                        "v": 2
+                    }
+                }
+            ]
+        },
+        {
+            "map": {
+                "0": 3,
+                "2": 1,
+                "1": 2
+            },
+            "implemented_gates": [
+                {
+                    "gate": {
+                        "gate_type": "CX",
+                        "qubits": [
+                            1,
+                            0
+                        ],
+                        "id": 4
+                    },
+                    "implementation": {
+                        "u": 2,
+                        "v": 3
+                    }
+                }
+            ]
+        },
+        {
+            "map": {
+                "0": 3,
+                "2": 1,
+                "1": 2
+            },
+            "implemented_gates": [
+                {
+                    "gate": {
+                        "gate_type": "CX",
+                        "qubits": [
+                            1,
+                            2
+                        ],
+                        "id": 5
+                    },
+                    "implementation": {
+                        "u": 2,
+                        "v": 1
+                    }
+                }
+            ]
+        },
+        {
+            "map": {
+                "0": 3,
+                "2": 2,
+                "1": 1
+            },
+            "implemented_gates": [
+                {
+                    "gate": {
+                        "gate_type": "CX",
+                        "qubits": [
+                            0,
+                            2
+                        ],
+                        "id": 6
+                    },
+                    "implementation": {
+                        "u": 3,
+                        "v": 2
+                    }
+                }
+            ]
+        },
+        {
+            "map": {
+                "0": 3,
+                "2": 1,
+                "1": 2
+            },
+            "implemented_gates": [
+                {
+                    "gate": {
+                        "gate_type": "CX",
+                        "qubits": [
+                            1,
+                            0
+                        ],
+                        "id": 7
+                    },
+                    "implementation": {
+                        "u": 2,
+                        "v": 3
+                    }
+                }
+            ]
+        },
+        {
+            "map": {
+                "0": 3,
+                "2": 1,
+                "1": 2
+            },
+            "implemented_gates": [
+                {
+                    "gate": {
+                        "gate_type": "CX",
+                        "qubits": [
+                            2,
+                            1
+                        ],
+                        "id": 8
+                    },
+                    "implementation": {
+                        "u": 1,
+                        "v": 2
+                    }
+                }
+            ]
+        },
+        {
+            "map": {
+                "0": 3,
+                "2": 1,
+                "1": 2
+            },
+            "implemented_gates": [
+                {
+                    "gate": {
+                        "gate_type": "CX",
+                        "qubits": [
+                            1,
+                            0
+                        ],
+                        "id": 9
+                    },
+                    "implementation": {
+                        "u": 2,
+                        "v": 3
+                    }
+                }
+            ]
+        },
+        {
+            "map": {
+                "0": 3,
+                "2": 1,
+                "1": 2
+            },
+            "implemented_gates": [
+                {
+                    "gate": {
+                        "gate_type": "CX",
+                        "qubits": [
+                            2,
+                            1
+                        ],
+                        "id": 10
+                    },
+                    "implementation": {
+                        "u": 1,
+                        "v": 2
+                    }
+                }
+            ]
+        },
+        {
+            "map": {
+                "0": 3,
+                "2": 2,
+                "1": 1
+            },
+            "implemented_gates": [
+                {
+                    "gate": {
+                        "gate_type": "CX",
+                        "qubits": [
+                            0,
+                            2
+                        ],
+                        "id": 11
+                    },
+                    "implementation": {
+                        "u": 3,
+                        "v": 2
+                    }
+                }
+            ]
+        },
+        {
+            "map": {
+                "0": 3,
+                "2": 1,
+                "1": 2
+            },
+            "implemented_gates": [
+                {
+                    "gate": {
+                        "gate_type": "CX",
+                        "qubits": [
+                            0,
+                            1
+                        ],
+                        "id": 12
+                    },
+                    "implementation": {
+                        "u": 3,
+                        "v": 2
+                    }
+                }
+            ]
+        },
+        {
+            "map": {
+                "0": 3,
+                "2": 1,
+                "1": 2
+            },
+            "implemented_gates": [
+                {
+                    "gate": {
+                        "gate_type": "CX",
+                        "qubits": [
+                            2,
+                            1
+                        ],
+                        "id": 13
+                    },
+                    "implementation": {
+                        "u": 1,
+                        "v": 2
+                    }
+                }
+            ]
+        },
+        {
+            "map": {
+                "0": 3,
+                "2": 2,
+                "1": 1
+            },
+            "implemented_gates": [
+                {
+                    "gate": {
+                        "gate_type": "CX",
+                        "qubits": [
+                            0,
+                            2
+                        ],
+                        "id": 14
+                    },
+                    "implementation": {
+                        "u": 3,
+                        "v": 2
+                    }
+                }
+            ]
+        },
+        {
+            "map": {
+                "0": 3,
+                "2": 1,
+                "1": 2
+            },
+            "implemented_gates": [
+                {
+                    "gate": {
+                        "gate_type": "CX",
+                        "qubits": [
+                            1,
+                            0
+                        ],
+                        "id": 15
+                    },
+                    "implementation": {
+                        "u": 2,
+                        "v": 3
+                    }
+                }
+            ]
+        },
+        {
+            "map": {
+                "0": 3,
+                "2": 1,
+                "1": 2
+            },
+            "implemented_gates": [
+                {
+                    "gate": {
+                        "gate_type": "CX",
+                        "qubits": [
+                            1,
+                            2
+                        ],
+                        "id": 16
+                    },
+                    "implementation": {
+                        "u": 2,
+                        "v": 1
+                    }
+                }
+            ]
+        }
+    ],
+    "transitions": [
+        "Swap { edge: (Location(0), Location(0)) }",
+        "Swap { edge: (Location(0), Location(0)) }",
+        "Swap { edge: (Location(0), Location(0)) }",
+        "Swap { edge: (Location(1), Location(2)) }",
+        "Swap { edge: (Location(0), Location(0)) }",
+        "Swap { edge: (Location(1), Location(2)) }",
+        "Swap { edge: (Location(1), Location(2)) }",
+        "Swap { edge: (Location(0), Location(0)) }",
+        "Swap { edge: (Location(0), Location(0)) }",
+        "Swap { edge: (Location(0), Location(0)) }",
+        "Swap { edge: (Location(1), Location(2)) }",
+        "Swap { edge: (Location(1), Location(2)) }",
+        "Swap { edge: (Location(0), Location(0)) }",
+        "Swap { edge: (Location(1), Location(2)) }",
+        "Swap { edge: (Location(1), Location(2)) }",
+        "Swap { edge: (Location(0), Location(0)) }"
+    ],
+    "cost": 7.0
+}

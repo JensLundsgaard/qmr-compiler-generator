@@ -213,8 +213,8 @@ fn mqlss_implement_gate(
         loc_to_node.remove(&loc);
     }
     let mut qubit_terminals = vec![];
-    match &gate.gate_type {
-        GateType::PauliRot { axis, angle } if *angle == (1, 8) || *angle == (-1, 8) => {
+    match &gate.operation {
+        Operation::PauliRot { axis, angle } if *angle == (1, 8) || *angle == (-1, 8) => {
             let msf_neighbors = arch
                 .magic_state_qubits
                 .clone()
@@ -240,7 +240,7 @@ fn mqlss_implement_gate(
                 }
             }
         }
-        GateType::PauliMeasurement { sign: _, axis } => {
+        Operation::PauliMeasurement { sign: _, axis } => {
             for i in 0..gate.qubits.len() {
                 match axis[i] {
                     PauliTerm::PauliX => {

@@ -84,7 +84,7 @@ fn gate_type_parser() -> impl Parser<char, Vec<ast::GateType>, Error = Simple<ch
     let gate_type = just("CX")
         .map(|_| ast::GateType::CX)
         .or(just("T").map(|_| ast::GateType::T))
-        .or(just("PauliRot").map(|_| ast::GateType::CX));
+        .or(just("Pauli").map(|_| ast::GateType::Pauli));
     gate_type.separated_by(just(",").padded()).at_least(1)
 }
 
@@ -258,7 +258,7 @@ fn expr_parser() -> impl Parser<char, ast::Expr, Error = Simple<char>> {
             .then(expr_parser.clone())
             .then_ignore(just(",").padded())
             .then(expr_parser.clone())
-            .then_ignore(just(")"))
+            .then_ignore(just(")").padded())
             .map(|((ident, func), container)| ast::Expr::MapIterExpr {
                 container: Box::new(container),
                 bound_var: ident,
@@ -285,7 +285,7 @@ fn expr_parser() -> impl Parser<char, ast::Expr, Error = Simple<char>> {
         ));
         let append = container_atom
             .clone()
-            .then_ignore(just(".push"))
+            .then_ignore(just(".push").padded())
             .then(expr_parser.clone().delimited_by(just("("), just(")")))
             .map(|(vec, elem)| ast::Expr::Append {
                 vec: Box::new(vec),
@@ -294,7 +294,7 @@ fn expr_parser() -> impl Parser<char, ast::Expr, Error = Simple<char>> {
 
         let extend = container_atom
             .clone()
-            .then_ignore(just(".extend"))
+            .then_ignore(just(".extend").padded())
             .then(expr_parser.clone().delimited_by(just("("), just(")")))
             .map(|(vec, elem)| ast::Expr::Extend {
                 vec1: Box::new(vec),

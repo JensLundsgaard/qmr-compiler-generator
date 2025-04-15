@@ -422,6 +422,9 @@ fn emit_mapping_heuristic() -> TokenStream {
             let graph = &arch.graph;
             let mut cost = 0;
             for gate in &c.gates {
+                if gate.qubits.len() < 2 {
+                    continue
+                }
                 let (cpos, tpos) = (map.get(&gate.qubits[0]), map.get(&gate.qubits[1]));
                 let (cind, tind) = (arch.index_map[cpos.unwrap()], arch.index_map[tpos.unwrap()]);
                 let sp_res = petgraph::algo::astar(graph, cind, |n| n == tind, |_| 1, |_| 1);

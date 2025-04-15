@@ -2,7 +2,7 @@ use builtin::{nisq, raa, scmr, mqlss};
 use solver::utils;
 
 fn nisq_test() {
-    let circ = utils::extract_cnots("/home/abtin/qmrsl/circuits/pf1_10.qasm");
+    let circ = utils::extract_cnots("/home/abtin/qmrsl/circuits/3_17_13.qasm");
     let g = utils::graph_from_file("/home/abtin/qmrsl/arch.txt");
     let arch = nisq::NisqArchitecture::new(g);
     let res =  nisq::nisq_solve(&circ, &arch);
@@ -33,8 +33,8 @@ fn mqlss_test(){
 }
 
 fn main() {
-    // nisq_test();
-    scmr_test();
+    nisq_test();
+    // scmr_test();
     // raa_test();
     // mqlss_test();
 }

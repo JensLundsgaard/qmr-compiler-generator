@@ -58,7 +58,7 @@ pub enum PauliTerm {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize)]
-pub enum GateType {
+pub enum Operation {
     CX,
     T,
     PauliRot {
@@ -70,57 +70,54 @@ pub enum GateType {
         axis: Vec<PauliTerm>,
     },
 }
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize)]
+pub enum GateType{
+    CX,
+    T,
+    PauliRot,
+    PauliMeasurement
+}
 
 #[derive(Clone, Debug, Eq, Hash, Serialize)]
 pub struct Gate {
-    pub gate_type: GateType,
+    pub operation: Operation,
     pub qubits: Vec<Qubit>,
     pub id: usize,
 }
 
 impl Gate {
-    pub fn x_indices(&self) -> Vec<Qubit> {
-        match &self.gate_type {
-            GateType::CX => vec![],
-            GateType::T => vec![],
-            GateType::PauliRot { axis, angle } => (0..axis.len())
-                .filter(|i| axis[*i] == PauliTerm::PauliX)
-                .map(Qubit::new)
-                .collect(),
-            GateType::PauliMeasurement { sign, axis } => (0..axis.len())
-                .filter(|i| axis[*i] == PauliTerm::PauliX)
-                .map(Qubit::new)
-                .collect(),
-        }
-    }
-    pub fn y_indices(&self) -> Vec<Qubit> {
-        match &self.gate_type {
-            GateType::CX => vec![],
-            GateType::T => vec![],
-            GateType::PauliRot { axis, angle } => (0..axis.len())
-                .filter(|i| axis[*i] == PauliTerm::PauliY)
-                .map(Qubit::new)
-                .collect(),
-            GateType::PauliMeasurement { sign, axis } => (0..axis.len())
-                .filter(|i| axis[*i] == PauliTerm::PauliY)
-                .map(Qubit::new)
-                .collect(),
+    fn filter_by_pauli_term(&self, term: &PauliTerm) -> Vec<Qubit> {
+        match &self.operation {
+            Operation::CX | Operation::T => vec![],
+            Operation::PauliRot { axis, .. } | Operation::PauliMeasurement { axis, .. } => {
+                (0..axis.len())
+                    .filter(|i| axis[*i] == *term)
+                    .map(Qubit::new)
+                    .collect()
+            }
         }
     }
 
+    pub fn x_indices(&self) -> Vec<Qubit> {
+        self.filter_by_pauli_term(&PauliTerm::PauliX)
+    }
+
+    pub fn y_indices(&self) -> Vec<Qubit> {
+        self.filter_by_pauli_term(&PauliTerm::PauliY)
+    }
+
     pub fn z_indices(&self) -> Vec<Qubit> {
-        match &self.gate_type {
-            GateType::CX => vec![],
-            GateType::T => vec![],
-            GateType::PauliRot { axis, angle } => (0..axis.len())
-                .filter(|i| axis[*i] == PauliTerm::PauliZ)
-                .map(Qubit::new)
-                .collect(),
-            GateType::PauliMeasurement { sign, axis } => (0..axis.len())
-                .filter(|i| axis[*i] == PauliTerm::PauliZ)
-                .map(Qubit::new)
-                .collect(),
+        self.filter_by_pauli_term(&PauliTerm::PauliZ)
+    }
+
+    pub fn gate_type(&self) -> GateType{
+        match &self.operation{
+            Operation::CX => GateType::CX,
+            Operation::T => GateType::T,
+            Operation::PauliRot { axis, angle } => GateType::PauliRot,
+            Operation::PauliMeasurement { sign, axis } => GateType::PauliMeasurement,
         }
+
     }
 }
 

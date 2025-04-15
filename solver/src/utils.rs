@@ -37,7 +37,7 @@ pub fn extract_cnots(filename: &str) -> Circuit {
                 qubits.insert(q1);
                 qubits.insert(q2);
                 let gate = Gate {
-                    gate_type: GateType::CX,
+                    operation: Operation::CX,
                     qubits: vec![q1, q2],
                     id,
                 };
@@ -68,7 +68,7 @@ pub fn extract_scmr_gates(filename: &str) -> Circuit {
                     let q = Qubit::new(c.get(2).unwrap().as_str().parse::<usize>().unwrap());
                     qubits.insert(q);
                     let gate = Gate {
-                        gate_type: GateType::T,
+                        operation: Operation::T,
                         qubits: vec![q],
                         id,
                     };
@@ -82,7 +82,7 @@ pub fn extract_scmr_gates(filename: &str) -> Circuit {
                 qubits.insert(q1);
                 qubits.insert(q2);
                 let gate = Gate {
-                    gate_type: GateType::CX,
+                    operation: Operation::CX,
                     qubits: vec![q1, q2],
                     id,
                 };
@@ -121,7 +121,7 @@ pub fn extract_gates(filename: &str, gate_types: &[&str]) -> Circuit {
                 qubits.insert(q1);
                 qubits.insert(q2);
                 Gate {
-                    gate_type: GateType::CX,
+                    operation: Operation::CX,
                     qubits: vec![q1, q2],
                     id,
                 }
@@ -137,7 +137,7 @@ pub fn extract_gates(filename: &str, gate_types: &[&str]) -> Circuit {
                     let q = Qubit::new(c.get(2).unwrap().as_str().parse::<usize>().unwrap());
                     qubits.insert(q);
                     Gate {
-                        gate_type: GateType::T,
+                        operation: Operation::T,
                         qubits: vec![q],
                         id,
                     }
@@ -160,7 +160,7 @@ pub fn extract_gates(filename: &str, gate_types: &[&str]) -> Circuit {
                     let gate_qubits: Vec<Qubit> = (0..axis_str.len()).map(Qubit::new).collect();
                     qubits.extend(gate_qubits.iter());
                     Gate {
-                        gate_type: GateType::PauliRot {
+                        operation: Operation::PauliRot {
                             axis,
                             angle: (numerator, denominator),
                         },
@@ -178,13 +178,13 @@ pub fn extract_gates(filename: &str, gate_types: &[&str]) -> Circuit {
                     let sign = sign_str != "-";
                     let axis_str = c.get(2).unwrap().as_str();
                     let axis = axis_str.chars().map(parse_pauli_term).collect();
-                    let gate_qubits: Vec<Qubit> = (1..axis_str.len())
+                    let gate_qubits: Vec<Qubit> = (0..axis_str.len())
                         .filter(|&ind| axis_str.chars().nth(ind).unwrap() != 'I')
                         .map(Qubit::new)
                         .collect();
                     qubits.extend(gate_qubits.iter());
                     Gate {
-                        gate_type: GateType::PauliMeasurement { sign, axis },
+                        operation: Operation::PauliMeasurement { sign, axis },
                         qubits: gate_qubits,
                         id,
                     }
@@ -491,7 +491,7 @@ pub fn all_paths<A: Architecture>(
     })
 }
 
-fn steiner_trees<A: Architecture>(
+pub fn steiner_trees<A: Architecture>(
     arch: &A,
     terminals : Vec<Vec<Location>>,
     blocked: Vec<Location>,
@@ -544,16 +544,13 @@ pub fn build_criticality_table(c: &Circuit) -> HashMap<usize, usize> {
 pub fn build_interaction_graph(c: &Circuit) -> Graph<Qubit, usize> {
     let mut nodes = HashMap::new();
     let mut g = Graph::new();
+    for qubit in &c.qubits{
+        nodes.insert(*qubit, g.add_node(*qubit));
+    }
     for gate in &c.gates {
-        match &gate.gate_type {
-            GateType::CX => {
+        match &gate.operation {
+            Operation::CX => {
                 let (ctrl, tar) = (gate.qubits[0], gate.qubits[1]);
-                if !nodes.contains_key(&ctrl) {
-                    nodes.insert(ctrl, g.add_node(ctrl));
-                }
-                if !nodes.contains_key(&tar) {
-                    nodes.insert(tar, g.add_node(tar));
-                }
                 let (ctrl_loc, tar_loc) = (
                     nodes
                         .get(&ctrl)
@@ -565,9 +562,32 @@ pub fn build_interaction_graph(c: &Circuit) -> Graph<Qubit, usize> {
                 g.update_edge(*ctrl_loc, *tar_loc, 0);
                 g.update_edge(*tar_loc, *ctrl_loc, 0);
             }
-            GateType::T => todo!(),
-            GateType::PauliRot { axis, angle } => todo!(),
-            GateType::PauliMeasurement { sign, axis } => todo!(),
+            Operation::T => todo!(),
+            Operation::PauliRot { axis, angle: _ } |  Operation::PauliMeasurement { sign : _, axis }  => {
+                // Iterate through all pairs of indices where the axis isn't PauliI
+                for (i, term_i) in axis.iter().enumerate() {
+                    if *term_i == PauliTerm::PauliI {
+                        continue; // Skip PauliI operations as they don't create interactions
+                    }
+                    
+                    let i_loc = *nodes.get(&Qubit::new(i)).expect("fetching node index in interaction graph");
+                    
+                    // For each other non-PauliI operation, add an edge between the qubits
+                    for (j, term_j) in axis.iter().enumerate() {
+                        if i == j || *term_j == PauliTerm::PauliI {
+                            continue; // Skip self-connections and PauliI operations
+                        }
+                        
+                        // Get or create the node for qubit j
+
+                        let j_loc = *nodes.get(&Qubit::new(j)).expect("fetching node index in interaction graph");
+                        
+                        // Update the edges in both directions
+                        g.update_edge(i_loc, j_loc, 0);
+                        g.update_edge(j_loc, i_loc, 0);
+                    }
+                }
+            }
         }
     }
     return g;
