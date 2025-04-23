@@ -152,7 +152,7 @@ fn ilq_step_cost(_step: &ILQStep, _arch : &ILQArch) -> f64 {
 
 fn ilq_implement_gate(step: &ILQStep, arch: &ILQArch, gate: &Gate) -> Option<ILQGateImplementation> {
     let (mut graph, mut loc_to_node) = arch.get_graph();
-    if gate.operation == Operation::CX && step.map[&gate.qubits[0]] == step.map[&gate.qubits[1]] {
+    if gate.operation == Operation::CX && (step.map[&gate.qubits[0]].get_index() / arch.stack_depth) == (step.map[&gate.qubits[1]].get_index() / arch.stack_depth) {
         return Some(ILQGateImplementation::Transversal {
             ctrl: step.map[&gate.qubits[0]],
             tar: step.map[&gate.qubits[1]],

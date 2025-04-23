@@ -1,5 +1,7 @@
+use itertools::Itertools;
 use petgraph::graph::NodeIndex;
 use rand::seq::IndexedRandom;
+use rand::seq::SliceRandom;
 
 use crate::structures::*;
 use crate::utils::*;
@@ -13,7 +15,7 @@ const GAMMA: f64 = 1.0;
 const DELTA: f64 = 1.0;
 const INITIAL_TEMP: f64 = 10.0;
 const TERM_TEMP: f64 = 0.00001;
-const COOL_RATE: f64 = 0.99;
+const COOL_RATE: f64 = 0.999;
 const SABRE_ITERATIONS: usize = 3;
 const ISOM_SEARCH_TIMEOUT: Duration = Duration::from_secs(300);
 
@@ -59,24 +61,39 @@ fn isomorphism_map_with_timeout<T: Architecture + Send + Sync + Clone + 'static>
     }
 }
 
-
-
+fn randomly_extend_partial_map<T: Architecture>(c: &Circuit, arch: &T, map: &QubitMap) -> QubitMap {
+    let mut extended = map.clone();
+    let mut rng = &mut rand::rng();
+    let unmapped_qubits: Vec<_> = c.qubits.iter().filter(|q| !map.contains_key(q)).collect();
+    let available_locations: Vec<_> = arch
+        .locations()
+        .into_iter()
+        .filter(|v| !map.values().contains(v))
+        .collect();
+    let chosen_locations = available_locations.choose_multiple(&mut rng, c.qubits.len());
+    for (q, l) in unmapped_qubits.iter().zip(chosen_locations) {
+        extended.insert(**q, *l);
+    }
+    return extended;
+}
 
 fn incremental_isomorphism_map<T: Architecture>(c: &Circuit, arch: &T) -> Option<QubitMap> {
     let mut gates = &c.gates[..1];
     let mut prefix_circuit = circuit_from_gates(gates.to_vec());
     let mut isom_map = None;
-    let mut candidate   =  isomorphism_map(&prefix_circuit, arch);
+    let mut candidate = isomorphism_map(&prefix_circuit, arch);
     let mut i = 1;
-    while candidate.is_some() && i < c.gates.len(){
+    while candidate.is_some() && i < c.gates.len() {
         gates = &c.gates[..i];
         prefix_circuit = circuit_from_gates(gates.to_vec());
         candidate = isomorphism_map(&prefix_circuit, arch);
-        if candidate.is_some(){
-            isom_map = candidate.clone();
+        if candidate.is_some() {
+            let full_map = candidate
+                .clone()
+                .map(|m| randomly_extend_partial_map(c, arch, &m));
+            isom_map = full_map;
         }
         i += 1;
-
     }
     return isom_map;
 }
@@ -99,8 +116,6 @@ fn incremental_isomorphism_map_with_timeout<T: Architecture + Send + Sync + Clon
         Err(_) => None,
     }
 }
-
-
 
 fn random_neighbor<T: Architecture>(map: &QubitMap, arch: &T) -> QubitMap {
     let mut moves: Vec<Box<dyn Fn(&QubitMap) -> QubitMap>> = Vec::new();
@@ -286,15 +301,15 @@ pub fn solve<
     mapping_heuristic: Option<fn(&A, &Circuit, &QubitMap) -> f64>,
     explore_routing_orders: bool,
 ) -> CompilerResult<G> {
-    println!("{:?}", c);
     let crit_table = &build_criticality_table(c);
     match mapping_heuristic {
         Some(heuristic) => {
             let map_h = |m: &QubitMap| heuristic(arch, c, m);
             let route_h = |c: &Circuit, m: &QubitMap| heuristic(arch, c, m);
             let isom_map = incremental_isomorphism_map_with_timeout(c, arch, ISOM_SEARCH_TIMEOUT);
+            println!("isom map: {:?}", isom_map);
             let isom_cost = isom_map.clone().map(|x| map_h(&x));
-            println!("made it past isom");
+
             let sa_map = match isom_cost {
                 Some(c) if c == 0.0 => None,
                 _ => Some(sim_anneal_mapping_search(
@@ -341,7 +356,7 @@ pub fn solve<
 }
 
 pub fn sabre_solve<
-    A: Architecture,
+    A: Architecture + Send + Sync + Clone + 'static,
     R: Transition<G, A> + Debug,
     G: GateImplementation + Debug,
     I: IntoIterator<Item = G>,
@@ -358,13 +373,14 @@ pub fn sabre_solve<
     let mut map = match mapping_heuristic {
         Some(heuristic) => {
             let map_h = |m: &QubitMap| heuristic(arch, c, m);
-            let isom_map = isomorphism_map(c, arch);
+            let isom_map: Option<HashMap<Qubit, Location>> =
+                incremental_isomorphism_map_with_timeout(c, arch, ISOM_SEARCH_TIMEOUT);
 
             let isom_cost = isom_map.clone().map(|x| map_h(&x));
             let sa_map = match isom_cost {
                 Some(c) if c == 0.0 => None,
                 _ => Some(sim_anneal_mapping_search(
-                    random_map(c, arch),
+                    isom_map.clone().unwrap_or_else(|| random_map(c, arch)),
                     arch,
                     INITIAL_TEMP,
                     TERM_TEMP,

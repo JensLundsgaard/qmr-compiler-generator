@@ -612,6 +612,7 @@ pub fn simulated_anneal<T: Clone>(
         let delta_best = next_cost - best_cost;
         let rand: f64 = rand::random();
         if delta_best < 0.0 {
+            println!("current sa score: {}", best_cost);
             best = next.clone();
             best_cost = next_cost;
             current = next;
