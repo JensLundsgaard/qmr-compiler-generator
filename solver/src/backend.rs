@@ -3,6 +3,7 @@ use petgraph::graph::NodeIndex;
 use rand::seq::IndexedRandom;
 use rand::seq::SliceRandom;
 
+use crate::config;
 use crate::structures::*;
 use crate::utils::*;
 use std::collections::HashSet;
@@ -18,6 +19,8 @@ const TERM_TEMP: f64 = 0.00001;
 const COOL_RATE: f64 = 0.999;
 const SABRE_ITERATIONS: usize = 3;
 const ISOM_SEARCH_TIMEOUT: Duration = Duration::from_secs(300);
+
+
 
 fn random_map<T: Architecture>(c: &Circuit, arch: &T) -> QubitMap {
     let mut map = HashMap::new();
