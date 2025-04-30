@@ -3,7 +3,7 @@ GateRealization[
     name='ScmrGate'
     data= (path : Vec<Location>)
     realize_gate =  
-    if (Gate.gate_type) == CX 
+    if (Gate.gate_type()) == CX 
         then 
             map(|x| -> GateRealization{path = x}, 
             all_paths(arch, vertical_neighbors(Step.map[Gate.qubits[0]], Arch.width, Arch.height), 

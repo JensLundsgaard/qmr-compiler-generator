@@ -5,8 +5,8 @@ use serde::Serialize;
 use solver::{
     backend::solve,
     structures::{
-        Architecture, Circuit, CompilerResult, Gate, GateImplementation, Location, Operation, Step,
-        Transition,
+        Architecture, Circuit, CompilerResult, Gate, GateImplementation, Location, Operation,
+        QubitMap, Step, Transition,
     },
     utils::{horizontal_neighbors, vertical_neighbors},
 };
@@ -146,13 +146,20 @@ fn ilq_transitions(_step: &ILQStep) -> Vec<IdTransition> {
     return vec![IdTransition];
 }
 
-fn ilq_step_cost(_step: &ILQStep, _arch : &ILQArch) -> f64 {
+fn ilq_step_cost(_step: &ILQStep, _arch: &ILQArch) -> f64 {
     return 1.0;
 }
 
-fn ilq_implement_gate(step: &ILQStep, arch: &ILQArch, gate: &Gate) -> Option<ILQGateImplementation> {
+fn ilq_implement_gate(
+    step: &ILQStep,
+    arch: &ILQArch,
+    gate: &Gate,
+) -> Option<ILQGateImplementation> {
     let (mut graph, mut loc_to_node) = arch.get_graph();
-    if gate.operation == Operation::CX && (step.map[&gate.qubits[0]].get_index() / arch.stack_depth) == (step.map[&gate.qubits[1]].get_index() / arch.stack_depth) {
+    if gate.operation == Operation::CX
+        && (step.map[&gate.qubits[0]].get_index() / arch.stack_depth)
+            == (step.map[&gate.qubits[1]].get_index() / arch.stack_depth)
+    {
         return Some(ILQGateImplementation::Transversal {
             ctrl: step.map[&gate.qubits[0]],
             tar: step.map[&gate.qubits[1]],
@@ -220,6 +227,18 @@ fn ilq_implement_gate(step: &ILQStep, arch: &ILQArch, gate: &Gate) -> Option<ILQ
     }
 }
 
+fn mapping_heuristic(_a: &ILQArch, c: &Circuit, m: &QubitMap) -> f64 {
+    let mut cost = 0;
+    for gate in &c.gates {
+        if gate.operation == Operation::CX
+            && m[&gate.qubits[0]].get_index() / 4 == m[&gate.qubits[1]].get_index() / 4
+        {
+            cost -= 1;
+        }
+    }
+    return cost as f64;
+}
+
 pub fn ilq_solve(c: &Circuit, a: &ILQArch) -> CompilerResult<ILQGateImplementation> {
     return solve(
         c,
@@ -227,7 +246,7 @@ pub fn ilq_solve(c: &Circuit, a: &ILQArch) -> CompilerResult<ILQGateImplementati
         &ilq_transitions,
         ilq_implement_gate,
         ilq_step_cost,
-        None,
+        Some(mapping_heuristic),
         true,
     );
 }

@@ -1,26 +1,15 @@
 use itertools::Itertools;
 use petgraph::graph::NodeIndex;
 use rand::seq::IndexedRandom;
-use rand::seq::SliceRandom;
 
-use crate::config;
+
+use crate::config::CONFIG;
 use crate::structures::*;
 use crate::utils::*;
 use std::collections::HashSet;
 use std::thread;
 use std::time::Duration;
 use std::{collections::HashMap, fmt::Debug};
-const ALPHA: f64 = 1.0;
-const BETA: f64 = 1.0;
-const GAMMA: f64 = 1.0;
-const DELTA: f64 = 1.0;
-const INITIAL_TEMP: f64 = 10.0;
-const TERM_TEMP: f64 = 0.00001;
-const COOL_RATE: f64 = 0.999;
-const SABRE_ITERATIONS: usize = 3;
-const ISOM_SEARCH_TIMEOUT: Duration = Duration::from_secs(300);
-
-
 
 fn random_map<T: Architecture>(c: &Circuit, arch: &T) -> QubitMap {
     let mut map = HashMap::new();
@@ -35,7 +24,10 @@ fn random_map<T: Architecture>(c: &Circuit, arch: &T) -> QubitMap {
 
 fn isomorphism_map<T: Architecture>(c: &Circuit, arch: &T) -> Option<QubitMap> {
     let interact_graph = build_interaction_graph(c);
-    let (graph, loc_to_node) = arch.graph();
+    let (mut graph, _) = arch.graph();
+    if arch.locations().len() < arch.graph().0.node_count() {
+        graph = reduced_graph(arch)
+    }
     let isom = vf2::subgraph_isomorphisms(&interact_graph, &graph).first();
     isom.map(|v| {
         v.iter()
@@ -45,7 +37,7 @@ fn isomorphism_map<T: Architecture>(c: &Circuit, arch: &T) -> Option<QubitMap> {
     })
 }
 
-fn isomorphism_map_with_timeout<T: Architecture + Send + Sync + Clone + 'static>(
+fn _isomorphism_map_with_timeout<T: Architecture + Send + Sync + Clone + 'static>(
     c: &Circuit,
     arch: &T,
     timeout: Duration,
@@ -272,7 +264,7 @@ fn find_best_next_step<
             .map(|x| crit_table[&x.id])
             .sum();
         let weighted_vals = std::iter::zip(
-            vec![ALPHA, BETA, GAMMA, DELTA],
+            vec![CONFIG.alpha, CONFIG.beta, CONFIG.gamma, CONFIG.delta],
             vec![s_cost, t_cost, m_cost, -(total_criticality as f64)],
         );
         let cost = drop_zeros_and_normalize(weighted_vals);
@@ -309,7 +301,11 @@ pub fn solve<
         Some(heuristic) => {
             let map_h = |m: &QubitMap| heuristic(arch, c, m);
             let route_h = |c: &Circuit, m: &QubitMap| heuristic(arch, c, m);
-            let isom_map = incremental_isomorphism_map_with_timeout(c, arch, ISOM_SEARCH_TIMEOUT);
+            let isom_map = incremental_isomorphism_map_with_timeout(
+                c,
+                arch,
+                Duration::from_secs(CONFIG.isom_search_timeout),
+            );
             println!("isom map: {:?}", isom_map);
             let isom_cost = isom_map.clone().map(|x| map_h(&x));
 
@@ -318,9 +314,9 @@ pub fn solve<
                 _ => Some(sim_anneal_mapping_search(
                     isom_map.clone().unwrap_or_else(|| random_map(c, arch)),
                     arch,
-                    INITIAL_TEMP,
-                    TERM_TEMP,
-                    COOL_RATE,
+                    CONFIG.mapping_search_initial_temp,
+                    CONFIG.mapping_search_term_temp,
+                    CONFIG.mapping_search_cool_rate,
                     map_h,
                 )),
             };
@@ -377,7 +373,11 @@ pub fn sabre_solve<
         Some(heuristic) => {
             let map_h = |m: &QubitMap| heuristic(arch, c, m);
             let isom_map: Option<HashMap<Qubit, Location>> =
-                incremental_isomorphism_map_with_timeout(c, arch, ISOM_SEARCH_TIMEOUT);
+                incremental_isomorphism_map_with_timeout(
+                    c,
+                    arch,
+                    Duration::from_secs(CONFIG.isom_search_timeout),
+                );
 
             let isom_cost = isom_map.clone().map(|x| map_h(&x));
             let sa_map = match isom_cost {
@@ -385,9 +385,9 @@ pub fn sabre_solve<
                 _ => Some(sim_anneal_mapping_search(
                     isom_map.clone().unwrap_or_else(|| random_map(c, arch)),
                     arch,
-                    INITIAL_TEMP,
-                    TERM_TEMP,
-                    COOL_RATE,
+                    CONFIG.mapping_search_initial_temp,
+                    CONFIG.mapping_search_term_temp,
+                    CONFIG.mapping_search_cool_rate,
                     map_h,
                 )),
             };
@@ -406,7 +406,7 @@ pub fn sabre_solve<
             Box::new(|_c: &Circuit, _m: &QubitMap| 0.0)
         };
 
-    for _ in 0..SABRE_ITERATIONS {
+    for _ in 0..CONFIG.sabre_iterations {
         for circ in [c, &c.reversed()] {
             let res = route(
                 circ,

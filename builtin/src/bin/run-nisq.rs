@@ -1,11 +1,16 @@
-use solver::utils::{self, IOError};
+use std::fs::File;
+
+use solver::utils::{self, graph_from_json_entry, IOError};
 use builtin::nisq::{self, nisq_solve, nisq_solve_sabre};
-use serde_json;
+use serde_json::{self, Value};
 
 
 fn run_nisq(circ_path: &str, arch_path : &str, solve_mode : &str) -> Result<(), IOError> {
-    let circ = utils::extract_scmr_gates(circ_path);
-    let g = utils::graph_from_file(arch_path);
+    let circ = utils::extract_cnots(circ_path);
+    let file = File::open(arch_path).expect("Opening architecture file");
+    let parsed: Value = serde_json::from_reader(file)
+        .expect("Parsing architecture file");
+    let g = graph_from_json_entry(parsed["graph"].clone());
     let arch = nisq::NisqArchitecture::new(g);
     let res =   match solve_mode {
         "--sabre" => Ok(nisq_solve_sabre(&circ, &arch)),
@@ -16,8 +21,8 @@ fn run_nisq(circ_path: &str, arch_path : &str, solve_mode : &str) -> Result<(), 
 }
 fn main() -> Result<(), IOError>  {
     let args: Vec<String> = std::env::args().collect();
-    if args.len() != 3 {
-    println!("Usage: run-nisq <circuit> <arch>");
+    if args.len() != 4 {
+    println!("Usage: run-nisq <circuit> <arch> <solve-mode>");
 }
     run_nisq(&args[1], &args[2], &args[3])
 }

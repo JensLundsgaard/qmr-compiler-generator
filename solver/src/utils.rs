@@ -1,12 +1,12 @@
 use crate::structures::*;
 
 use itertools::{max, Itertools};
-use petgraph::graph::NodeIndex;
+use petgraph::graph::{Node, NodeIndex};
 use petgraph::Direction::Outgoing;
 use petgraph::Graph;
-use rustworkx_core::steiner_tree::steiner_tree;
 use rand::Rng;
 use regex::Regex;
+use rustworkx_core::steiner_tree::steiner_tree;
 use serde_json::Value;
 use std::collections::{HashMap, HashSet};
 use std::fs::File;
@@ -414,9 +414,12 @@ pub fn all_paths<A: Architecture>(
     blocked: Vec<Location>,
 ) -> impl Iterator<Item = Vec<Location>> {
     let (mut graph, mut loc_to_node) = arch.graph();
+    println! {"{:?}", loc_to_node};
+    println!("{:?}", blocked);
     let max_length = graph.node_count();
     for loc in blocked.iter() {
         let old_last = graph[graph.node_indices().last().unwrap()];
+        println! {"{:?}", loc}
         graph.remove_node(loc_to_node[loc]);
         loc_to_node.insert(old_last, loc_to_node[loc]);
         loc_to_node.remove(loc);
@@ -493,7 +496,7 @@ pub fn all_paths<A: Architecture>(
 
 pub fn steiner_trees<A: Architecture>(
     arch: &A,
-    terminals : Vec<Vec<Location>>,
+    terminals: Vec<Vec<Location>>,
     blocked: Vec<Location>,
 ) -> impl IntoIterator<Item = Vec<Location>> {
     let (mut graph, mut loc_to_node) = arch.graph();
@@ -503,11 +506,13 @@ pub fn steiner_trees<A: Architecture>(
         loc_to_node.insert(old_last, loc_to_node[loc]);
         loc_to_node.remove(loc);
     }
-    let terminal_sets = terminals.into_iter().multi_cartesian_product().filter(|v|v.iter().all(|l| loc_to_node.contains_key(l)));
+    let terminal_sets = terminals
+        .into_iter()
+        .multi_cartesian_product()
+        .filter(|v| v.iter().all(|l| loc_to_node.contains_key(l)));
     let mut impls = vec![];
     for terminal_set in terminal_sets {
-        let indices: Vec<NodeIndex> =
-            terminal_set.into_iter().map(|x| loc_to_node[&x]).collect();
+        let indices: Vec<NodeIndex> = terminal_set.into_iter().map(|x| loc_to_node[&x]).collect();
         let steiner_tree_res = steiner_tree(&graph, &indices, |_| Ok::<f64, ()>(1.0));
 
         if let Ok(Some(tree)) = steiner_tree_res {
@@ -521,8 +526,6 @@ pub fn steiner_trees<A: Architecture>(
         }
     }
     return impls;
-
-
 }
 
 pub fn build_criticality_table(c: &Circuit) -> HashMap<usize, usize> {
@@ -544,7 +547,7 @@ pub fn build_criticality_table(c: &Circuit) -> HashMap<usize, usize> {
 pub fn build_interaction_graph(c: &Circuit) -> Graph<Qubit, usize> {
     let mut nodes = HashMap::new();
     let mut g = Graph::new();
-    for qubit in &c.qubits{
+    for qubit in &c.qubits {
         nodes.insert(*qubit, g.add_node(*qubit));
     }
     for gate in &c.gates {
@@ -562,26 +565,31 @@ pub fn build_interaction_graph(c: &Circuit) -> Graph<Qubit, usize> {
                 g.update_edge(*ctrl_loc, *tar_loc, 0);
                 g.update_edge(*tar_loc, *ctrl_loc, 0);
             }
-            Operation::T => todo!(),
-            Operation::PauliRot { axis, angle: _ } |  Operation::PauliMeasurement { sign : _, axis }  => {
+            Operation::T => continue,
+            Operation::PauliRot { axis, angle: _ }
+            | Operation::PauliMeasurement { sign: _, axis } => {
                 // Iterate through all pairs of indices where the axis isn't PauliI
                 for (i, term_i) in axis.iter().enumerate() {
                     if *term_i == PauliTerm::PauliI {
                         continue; // Skip PauliI operations as they don't create interactions
                     }
-                    
-                    let i_loc = *nodes.get(&Qubit::new(i)).expect("fetching node index in interaction graph");
-                    
+
+                    let i_loc = *nodes
+                        .get(&Qubit::new(i))
+                        .expect("fetching node index in interaction graph");
+
                     // For each other non-PauliI operation, add an edge between the qubits
                     for (j, term_j) in axis.iter().enumerate() {
                         if i == j || *term_j == PauliTerm::PauliI {
                             continue; // Skip self-connections and PauliI operations
                         }
-                        
+
                         // Get or create the node for qubit j
 
-                        let j_loc = *nodes.get(&Qubit::new(j)).expect("fetching node index in interaction graph");
-                        
+                        let j_loc = *nodes
+                            .get(&Qubit::new(j))
+                            .expect("fetching node index in interaction graph");
+
                         // Update the edges in both directions
                         g.update_edge(i_loc, j_loc, 0);
                         g.update_edge(j_loc, i_loc, 0);
@@ -639,4 +647,34 @@ pub fn swap_random_array_elements<T: Clone>(array: &Vec<T>) -> Vec<T> {
     let mut new = array.clone();
     new.swap(idx1, idx2);
     return new;
+}
+
+pub fn reduced_graph<A: Architecture>(arch: &A) -> Graph<Location, ()>{
+    let (full_graph, index_map) = arch.graph();
+    let mut reduced_graph = Graph::new();
+    let mut reduced_index_map = HashMap::new();
+    let locations = arch.locations();
+    for l in &locations {
+        let n = reduced_graph.add_node(*l);
+        reduced_index_map.insert(*l, n);
+    }
+    for n in full_graph.node_indices() {
+        if !locations.contains(&full_graph[n]) {
+            let neighbors = full_graph.neighbors(n);
+
+            for (n1, n2) in neighbors.tuple_combinations() {
+                reduced_graph.add_edge(
+                    reduced_index_map[&full_graph[n1]],
+                    reduced_index_map[&full_graph[n2]],
+                    (),
+                );
+                reduced_graph.add_edge(
+                    reduced_index_map[&full_graph[n2]],
+                    reduced_index_map[&full_graph[n1]],
+                    (),
+                );
+            }
+        }
+    }
+   return reduced_graph;
 }

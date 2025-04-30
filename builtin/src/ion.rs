@@ -149,7 +149,7 @@ impl Transition<IonGateImplementation, IonArch> for IonTransition {
         return format!("{:?}", self);
     }
 
-    fn cost(&self, arch: &IonArch) -> f64 {
+    fn cost(&self, _arch: &IonArch) -> f64 {
         if self.edge.0 == self.edge.1 {
             0.0
         } else {
@@ -185,7 +185,6 @@ fn ion_implement_gate(
     arch: &IonArch,
     gate: &Gate,
 ) -> Option<IonGateImplementation> {
-    let (graph, index_map) = arch.get_graph();
     let (cpos, tpos) = (step.map.get(&gate.qubits[0]), step.map.get(&gate.qubits[1]));
     match (cpos, tpos) {
         (Some(cpos), Some(tpos)) if arch.get_trap(*cpos) == arch.get_trap(*tpos) => {
@@ -223,7 +222,7 @@ pub fn ion_solve(c: &Circuit, a: &IonArch) -> CompilerResult<IonGateImplementati
         a,
         &|_s| ion_transitions(a),
         ion_implement_gate,
-        |s, a| 0.0,
+        |_s, _a| 0.0,
         Some(mapping_heuristic),
         false,
     );

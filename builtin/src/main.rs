@@ -19,7 +19,7 @@ fn raa_test() {
 }
 
 fn scmr_test() {
-    let circ = utils::extract_scmr_gates("/home/abtin/qmrsl/circuits/pf1_10.qasm");
+    let circ = utils::extract_scmr_gates("/home/abtin/qmrsl/circuits/3_17_13.qasm");
     let arch = scmr::compact_layout(circ.qubits.len());
     println!("{:?}", scmr::scmr_solve(&circ, &arch).cost);
 }
@@ -33,8 +33,8 @@ fn mqlss_test(){
 }
 
 fn main() {
-    nisq_test();
-    // scmr_test();
+    //nisq_test();
+    scmr_test();
     // raa_test();
     // mqlss_test();
 }

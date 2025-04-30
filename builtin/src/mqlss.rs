@@ -2,14 +2,10 @@ use itertools::Itertools;
 use rustworkx_core::{
     petgraph::{self, graph::NodeIndex},
     steiner_tree::steiner_tree,
-    Result,
 };
 use serde::Serialize;
 use solver::{backend::solve, structures::*, utils::*};
-use std::{
-    collections::{HashMap, HashSet},
-    iter::empty,
-};
+use std::collections::{HashMap, HashSet};
 #[derive(Clone)]
 pub struct MQLSSArchitecture {
     pub width: usize,
@@ -223,18 +219,28 @@ fn mqlss_implement_gate(
                 .flatten()
                 .collect();
             qubit_terminals.push(msf_neighbors);
-            
+
             for i in 0..gate.qubits.len() {
                 match axis[i] {
                     PauliTerm::PauliX => {
-                        qubit_terminals.push(horizontal_neighbors(step.map[&gate.qubits[i]], arch.width));
+                        qubit_terminals
+                            .push(horizontal_neighbors(step.map[&gate.qubits[i]], arch.width));
                     }
                     PauliTerm::PauliY => {
-                        qubit_terminals.push(vertical_neighbors(step.map[&gate.qubits[i]], arch.width, arch.height));
-                        qubit_terminals.push(horizontal_neighbors(step.map[&gate.qubits[i]], arch.width));
+                        qubit_terminals.push(vertical_neighbors(
+                            step.map[&gate.qubits[i]],
+                            arch.width,
+                            arch.height,
+                        ));
+                        qubit_terminals
+                            .push(horizontal_neighbors(step.map[&gate.qubits[i]], arch.width));
                     }
                     PauliTerm::PauliZ => {
-                        qubit_terminals.push(vertical_neighbors(step.map[&gate.qubits[i]], arch.width, arch.height));
+                        qubit_terminals.push(vertical_neighbors(
+                            step.map[&gate.qubits[i]],
+                            arch.width,
+                            arch.height,
+                        ));
                     }
                     PauliTerm::PauliI => {}
                 }
@@ -244,41 +250,58 @@ fn mqlss_implement_gate(
             for i in 0..gate.qubits.len() {
                 match axis[i] {
                     PauliTerm::PauliX => {
-                        qubit_terminals.push(horizontal_neighbors(step.map[&gate.qubits[i]], arch.width));
+                        qubit_terminals
+                            .push(horizontal_neighbors(step.map[&gate.qubits[i]], arch.width));
                     }
                     PauliTerm::PauliY => {
-                        qubit_terminals.push(vertical_neighbors(step.map[&gate.qubits[i]], arch.width, arch.height));
-                        qubit_terminals.push(horizontal_neighbors(step.map[&gate.qubits[i]], arch.width));
+                        qubit_terminals.push(vertical_neighbors(
+                            step.map[&gate.qubits[i]],
+                            arch.width,
+                            arch.height,
+                        ));
+                        qubit_terminals
+                            .push(horizontal_neighbors(step.map[&gate.qubits[i]], arch.width));
                     }
                     PauliTerm::PauliZ => {
-                        qubit_terminals.push(vertical_neighbors(step.map[&gate.qubits[i]], arch.width, arch.height));
+                        qubit_terminals.push(vertical_neighbors(
+                            step.map[&gate.qubits[i]],
+                            arch.width,
+                            arch.height,
+                        ));
                     }
                     PauliTerm::PauliI => {}
                 }
             }
         }
-        _ => {panic!("Tried to do MQLSS with gate {:?}, which is not supported", gate)},
-    }
-        let terminal_sets = qubit_terminals.into_iter().multi_cartesian_product().filter(|v|v.iter().all(|l| loc_to_node.contains_key(l)));
-
-        for terminal_set in terminal_sets {
-            let indices: Vec<NodeIndex> =
-                terminal_set.into_iter().map(|x| loc_to_node[&x]).collect();
-            let steiner_tree_res = steiner_tree(&graph, &indices, |_| Ok::<f64, ()>(1.0));
-
-            if let Ok(Some(tree)) = steiner_tree_res {
-                let locations = tree
-                    .used_node_indices
-                    .into_iter()
-                    .map(|n| &graph[NodeIndex::new(n)])
-                    .cloned()
-                    .collect();
-                impls.push(MQLSSGateImplementation {
-                    used_nodes: locations,
-                });
-            }
+        _ => {
+            panic!(
+                "Tried to do MQLSS with gate {:?}, which is not supported",
+                gate
+            )
         }
-        return impls;
+    }
+    let terminal_sets = qubit_terminals
+        .into_iter()
+        .multi_cartesian_product()
+        .filter(|v| v.iter().all(|l| loc_to_node.contains_key(l)));
+
+    for terminal_set in terminal_sets {
+        let indices: Vec<NodeIndex> = terminal_set.into_iter().map(|x| loc_to_node[&x]).collect();
+        let steiner_tree_res = steiner_tree(&graph, &indices, |_| Ok::<f64, ()>(1.0));
+
+        if let Ok(Some(tree)) = steiner_tree_res {
+            let locations = tree
+                .used_node_indices
+                .into_iter()
+                .map(|n| &graph[NodeIndex::new(n)])
+                .cloned()
+                .collect();
+            impls.push(MQLSSGateImplementation {
+                used_nodes: locations,
+            });
+        }
+    }
+    return impls;
 }
 
 pub fn mqlss_solve(c: &Circuit, a: &MQLSSArchitecture) -> CompilerResult<MQLSSGateImplementation> {

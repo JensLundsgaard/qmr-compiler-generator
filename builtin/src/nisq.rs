@@ -81,7 +81,7 @@ impl Transition<NisqGateImplementation, NisqArchitecture> for NisqTrans {
     }
 }
 
-fn nisq_transitions(arch: &NisqArchitecture) -> Vec<NisqTrans> {
+fn nisq_transitions(step: &NisqStep, arch: &NisqArchitecture) -> Vec<NisqTrans> {
     let mut transitions = Vec::new();
     transitions.push(NisqTrans {
         edge: (Location::new(0), Location::new(0)),
@@ -89,8 +89,10 @@ fn nisq_transitions(arch: &NisqArchitecture) -> Vec<NisqTrans> {
     for edge in arch.graph.edge_indices() {
         let (source, target) = arch.graph.edge_endpoints(edge).unwrap();
         let (loc1, loc2) = (arch.graph[source], arch.graph[target]);
-        let trans = NisqTrans { edge: (loc1, loc2) };
-        transitions.push(trans);
+        if step.map.values().collect::<Vec<_>>().contains(&&loc1) || step.map.values().collect::<Vec<_>>().contains(&&loc1) {
+                let trans = NisqTrans { edge: (loc1, loc2) };
+                transitions.push(trans);
+        }
     }
     return transitions;
 }
@@ -147,7 +149,7 @@ pub fn nisq_solve_sabre(
     return sabre_solve(
         c,
         a,
-        &|_s| nisq_transitions(a),
+        &|s| nisq_transitions(s, a),
         nisq_implement_gate,
         nisq_step_cost,
         Some(mapping_heuristic),
@@ -159,7 +161,7 @@ pub fn nisq_solve(c: &Circuit, a: &NisqArchitecture) -> CompilerResult<NisqGateI
     return solve(
         c,
         a,
-        &|_s| nisq_transitions(a),
+        &|s| nisq_transitions(s, a),
         nisq_implement_gate,
         nisq_step_cost,
         Some(mapping_heuristic),

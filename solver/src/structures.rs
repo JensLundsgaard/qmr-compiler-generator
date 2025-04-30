@@ -1,3 +1,4 @@
+use crate::config::CONFIG;
 use crate::utils::simulated_anneal;
 use crate::utils::swap_random_array_elements;
 use itertools::Itertools;
@@ -9,12 +10,6 @@ use std::collections::{HashMap, HashSet};
 use std::fmt::Debug;
 use std::hash::Hash;
 use std::ops::Index;
-
-const INITIAL_TEMP: f64 = 10.0;
-const TERM_TEMP: f64 = 0.00001;
-const COOL_RATE: f64 = 0.99;
-
-const EXHAUSTIVE_EXPLORATION_THRESHOLD: usize = 8;
 
 #[derive(Hash, PartialEq, Eq, Clone, Copy, Debug, Serialize)]
 pub struct Qubit(usize);
@@ -71,11 +66,11 @@ pub enum Operation {
     },
 }
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize)]
-pub enum GateType{
+pub enum GateType {
     CX,
     T,
     PauliRot,
-    PauliMeasurement
+    PauliMeasurement,
 }
 
 #[derive(Clone, Debug, Eq, Hash, Serialize)]
@@ -89,12 +84,11 @@ impl Gate {
     fn filter_by_pauli_term(&self, term: &PauliTerm) -> Vec<Qubit> {
         match &self.operation {
             Operation::CX | Operation::T => vec![],
-            Operation::PauliRot { axis, .. } | Operation::PauliMeasurement { axis, .. } => {
-                (0..axis.len())
-                    .filter(|i| axis[*i] == *term)
-                    .map(Qubit::new)
-                    .collect()
-            }
+            Operation::PauliRot { axis, .. } | Operation::PauliMeasurement { axis, .. } => (0
+                ..axis.len())
+                .filter(|i| axis[*i] == *term)
+                .map(Qubit::new)
+                .collect(),
         }
     }
 
@@ -110,14 +104,13 @@ impl Gate {
         self.filter_by_pauli_term(&PauliTerm::PauliZ)
     }
 
-    pub fn gate_type(&self) -> GateType{
-        match &self.operation{
+    pub fn gate_type(&self) -> GateType {
+        match &self.operation {
             Operation::CX => GateType::CX,
             Operation::T => GateType::T,
             Operation::PauliRot { axis, angle } => GateType::PauliRot,
             Operation::PauliMeasurement { sign, axis } => GateType::PauliMeasurement,
         }
-
     }
 }
 
@@ -207,7 +200,7 @@ impl<G: GateImplementation> Step<G> {
         assert!(self.implemented_gates.is_empty());
         let mut best_total_criticality = 0;
         let orders = executable.iter().cloned().permutations(executable.len());
-        if executable.len() < EXHAUSTIVE_EXPLORATION_THRESHOLD {
+        if executable.len() < CONFIG.exhaustive_exploration_threshold {
             for order in orders {
                 let mut step = Step {
                     map: self.map.clone(),
@@ -241,9 +234,9 @@ impl<G: GateImplementation> Step<G> {
             let random_neighbor = swap_random_array_elements;
             let best_order = simulated_anneal(
                 executable.clone(),
-                INITIAL_TEMP,
-                TERM_TEMP,
-                COOL_RATE,
+                CONFIG.routing_search_initial_temp,
+                CONFIG.routing_search_term_temp,
+                CONFIG.routing_search_cool_rate,
                 random_neighbor,
                 cost_function,
             );
