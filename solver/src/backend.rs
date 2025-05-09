@@ -1,11 +1,11 @@
-use itertools::Itertools;
-use petgraph::graph::NodeIndex;
-use rand::seq::IndexedRandom;
-
-
 use crate::config::CONFIG;
 use crate::structures::*;
 use crate::utils::*;
+use core::num;
+use itertools::Itertools;
+use petgraph::graph::NodeIndex;
+use rand::seq::IndexedRandom;
+use rayon::prelude::*;
 use std::collections::HashSet;
 use std::thread;
 use std::time::Duration;
@@ -232,7 +232,7 @@ fn route<
 
 fn find_best_next_step<
     A: Architecture,
-    R: Transition<G, A>,
+    R: Transition<G, A> + Debug,
     G: GateImplementation,
     I: IntoIterator<Item = G>,
 >(
@@ -246,7 +246,8 @@ fn find_best_next_step<
     explore_routing_orders: bool,
     crit_table: &HashMap<usize, usize>,
 ) -> Option<(Step<G>, R, f64)> {
-    let mut best: Option<(Step<G>, R, f64)> = None;
+    let mut best_options = Vec::new();
+    let mut best_cost = std::f64::MAX;
     for trans in transitions(last_step) {
         let mut next_step = trans.apply(last_step);
         let executable = c.get_front_layer();
@@ -268,18 +269,21 @@ fn find_best_next_step<
             vec![s_cost, t_cost, m_cost, -(total_criticality as f64)],
         );
         let cost = drop_zeros_and_normalize(weighted_vals);
-        match best {
-            Some((ref _s, ref _prev_trans, b)) => {
-                if cost < b {
-                    best = Some((next_step, trans, cost));
-                }
+        if cost <= best_cost {
+            if cost < best_cost {
+                best_options.clear();
+                best_cost = cost;
             }
-            None => {
-                best = Some((next_step, trans, cost));
-            }
+            best_options.push((next_step, trans, cost));
         }
     }
-    return best;
+
+    if best_options.is_empty() {
+        None
+    } else {
+        let index = rand::random_range(..best_options.len());
+        Some(best_options.remove(index))
+    }
 }
 
 pub fn solve<
@@ -306,7 +310,7 @@ pub fn solve<
                 arch,
                 Duration::from_secs(CONFIG.isom_search_timeout),
             );
-            println!("isom map: {:?}", isom_map);
+
             let isom_cost = isom_map.clone().map(|x| map_h(&x));
 
             let sa_map = match isom_cost {
@@ -322,6 +326,7 @@ pub fn solve<
             };
             let sa_cost = sa_map.clone().map(|x| map_h(&x));
             let map = match (isom_cost, sa_cost) {
+                (Some(i_c), None) => isom_map.unwrap(),
                 (Some(i_c), Some(s_c)) if i_c < s_c => isom_map.unwrap(),
                 _ => sa_map.unwrap(),
             };
@@ -363,11 +368,15 @@ pub fn sabre_solve<
     c: &Circuit,
     arch: &A,
     transitions: &impl Fn(&Step<G>) -> Vec<R>,
-    implement_gate: impl Fn(&Step<G>, &A, &Gate) -> I,
+    implement_gate: &impl Fn(&Step<G>, &A, &Gate) -> I,
     step_cost: fn(&Step<G>, &A) -> f64,
     mapping_heuristic: Option<fn(&A, &Circuit, &QubitMap) -> f64>,
     explore_routing_orders: bool,
 ) -> CompilerResult<G> {
+    match serde_json::to_writer(std::fs::File::create("config_full.json").unwrap(), &*CONFIG) {
+        Ok(_) => (),
+        Err(e) => panic!("Error writing config file {}", e),
+    }
     let crit_table = &build_criticality_table(c);
     let mut map = match mapping_heuristic {
         Some(heuristic) => {
@@ -433,4 +442,125 @@ pub fn sabre_solve<
         explore_routing_orders,
         crit_table,
     );
+}
+
+pub fn solve_with_cached_heuristic<
+    A: Architecture + Send + Sync + Clone + 'static,
+    R: Transition<G, A> + Debug,
+    G: GateImplementation + Debug,
+    I: IntoIterator<Item = G>,
+>(
+    c: &Circuit,
+    arch: &A,
+    transitions: &impl Fn(&Step<G>) -> Vec<R>,
+    implement_gate: impl Fn(&Step<G>, &A, &Gate) -> I,
+    step_cost: fn(&Step<G>, &A) -> f64,
+    mapping_heuristic: Option<fn(&A, &Circuit, &QubitMap) -> f64>,
+    delta_on_move: impl Fn(&QubitMap, Move) -> f64,
+    explore_routing_orders: bool,
+) -> CompilerResult<G> {
+    let crit_table = &build_criticality_table(c);
+    let mut map = match mapping_heuristic {
+        Some(heuristic) => {
+            let map_h = |m: &QubitMap| heuristic(arch, c, m);
+            let isom_map: Option<HashMap<Qubit, Location>> =
+                incremental_isomorphism_map_with_timeout(
+                    c,
+                    arch,
+                    Duration::from_secs(CONFIG.isom_search_timeout),
+                );
+
+            let isom_cost = isom_map.clone().map(|x| map_h(&x));
+            let sa_map = match isom_cost {
+                Some(c) if c == 0.0 => None,
+                _ => Some(fast_mapping_simulated_anneal(
+                    &isom_map.clone().unwrap_or_else(|| random_map(c, arch)),
+                    arch,
+                    CONFIG.mapping_search_initial_temp,
+                    CONFIG.mapping_search_term_temp,
+                    CONFIG.mapping_search_cool_rate,
+                    map_h,
+                    delta_on_move,
+                )),
+            };
+
+            let sa_cost = sa_map.clone().map(|x| map_h(&x));
+            match (isom_cost, sa_cost) {
+                (Some(i_c), Some(s_c)) if i_c < s_c => isom_map.unwrap(),
+                _ => sa_map.unwrap(),
+            }
+        }
+        None => random_map(c, arch),
+    };
+    let route_h: Box<dyn Fn(&Circuit, &QubitMap) -> f64> =
+        if let Some(ref heuristic) = mapping_heuristic {
+            Box::new(|c: &Circuit, m: &QubitMap| heuristic(arch, c, m))
+        } else {
+            Box::new(|_c: &Circuit, _m: &QubitMap| 0.0)
+        };
+
+    for _ in 0..CONFIG.sabre_iterations {
+        for circ in [c, &c.reversed()] {
+            let res = route(
+                circ,
+                arch,
+                map,
+                transitions,
+                &implement_gate,
+                step_cost,
+                &route_h,
+                explore_routing_orders,
+                crit_table,
+            );
+            map = res.steps.last().unwrap().map.clone();
+        }
+    }
+    return route(
+        c,
+        arch,
+        map,
+        transitions,
+        &implement_gate,
+        step_cost,
+        &route_h,
+        explore_routing_orders,
+        crit_table,
+    );
+}
+
+pub fn sabre_solve_parallel<
+    A: Architecture + Send + Sync + Clone + 'static,
+    R: Transition<G, A> + Debug,
+    G: GateImplementation + Debug + Send,
+    I: IntoIterator<Item = G>,
+>(
+    c: &Circuit,
+    arch: &A,
+    transitions: &(impl Fn(&Step<G>) -> Vec<R> + std::marker::Sync),
+    implement_gate: impl Fn(&Step<G>, &A, &Gate) -> I + std::marker::Sync + std::marker::Send,
+    step_cost: fn(&Step<G>, &A) -> f64,
+    mapping_heuristic: Option<fn(&A, &Circuit, &QubitMap) -> f64>,
+    explore_routing_orders: bool,
+    num_trials: usize,
+) -> CompilerResult<G> {
+    (0..num_trials)
+        .into_par_iter()
+        .map(|_| {
+            sabre_solve(
+                c,
+                arch,
+                transitions,
+                &implement_gate,
+                step_cost,
+                mapping_heuristic,
+                explore_routing_orders,
+            )
+        })
+        .min_by(|a, b| {
+            // if cost is f64, handle NaN/partial_cmp
+            a.cost
+                .partial_cmp(&b.cost)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        })
+        .expect("num_trials should be > 0")
 }

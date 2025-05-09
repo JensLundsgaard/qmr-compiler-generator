@@ -493,7 +493,7 @@ fn emit_sabre_solve_function(imp: &ImplBlock) -> TokenStream {
     let imp_struct_name = syn::Ident::new(&imp.data.name, Span::call_site());
     quote! {
         fn my_sabre_solve(c : &Circuit, a : &CustomArch) -> CompilerResult<#imp_struct_name> {
-            return backend::sabre_solve(c, a, &|s| available_transitions(a, s), realize_gate, custom_step_cost, Some(mapping_heuristic), #explore_orders);
+            return backend::sabre_solve(c, a, &|s| available_transitions(a, s), &realize_gate, custom_step_cost, Some(mapping_heuristic), #explore_orders);
     }
     }
 }

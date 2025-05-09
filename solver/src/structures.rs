@@ -200,7 +200,7 @@ impl<G: GateImplementation> Step<G> {
         assert!(self.implemented_gates.is_empty());
         let mut best_total_criticality = 0;
         let orders = executable.iter().cloned().permutations(executable.len());
-        if executable.len() < CONFIG.exhaustive_exploration_threshold {
+        if executable.len() < CONFIG.exhaustive_search_threshold {
             for order in orders {
                 let mut step = Step {
                     map: self.map.clone(),

@@ -1,7 +1,8 @@
 use petgraph::{graph::NodeIndex, Graph};
 use serde::Serialize;
-use solver::backend::{sabre_solve, solve};
+use solver::backend::{sabre_solve, sabre_solve_parallel, solve, solve_with_cached_heuristic};
 use solver::structures::*;
+use solver::utils::Move;
 use std::collections::{HashMap, HashSet};
 #[derive(Clone)]
 pub struct NisqArchitecture {
@@ -141,12 +142,85 @@ fn mapping_heuristic(arch: &NisqArchitecture, c: &Circuit, map: &HashMap<Qubit, 
     return cost as f64;
 }
 
+fn delta_on_move(map: &QubitMap, chosen_move: Move, c: &Circuit, arch: &NisqArchitecture) -> f64 {
+    let mut delta = 0;
+    let graph = arch.get_graph();
+    let mut new_map = map.clone();
+    let mut moved_qubits = vec![];
+    match chosen_move {
+        Move::Swap(q1, q2) => {
+            let loc1 = map.get(&q1).unwrap();
+            let loc2 = map.get(&q2).unwrap();
+            new_map.insert(q1, *loc2);
+            new_map.insert(q2, *loc1);
+            moved_qubits.push(q1);
+            moved_qubits.push(q2);
+        }
+        Move::IntoOpen(qubit, location) => {
+            new_map.insert(qubit, location);
+            moved_qubits.push(qubit);
+        }
+    }
+    for gate in &c.gates {
+        let modified = moved_qubits.iter().any(|x| gate.qubits.contains(x));
+        if modified {
+            let (cpos_old, tpos_old) = (map.get(&gate.qubits[0]), map.get(&gate.qubits[1]));
+            let (cind_old, tind_old) = (
+                arch.index_map[cpos_old.unwrap()],
+                arch.index_map[tpos_old.unwrap()],
+            );
+            let sp_res_old =
+                petgraph::algo::astar(graph, cind_old, |n| n == tind_old, |_| 1, |_| 0);
+            let (cpos_new, tpos_new) = (new_map.get(&gate.qubits[0]), new_map.get(&gate.qubits[1]));
+            let (cind_new, tind_new) = (
+                arch.index_map[cpos_new.unwrap()],
+                arch.index_map[tpos_new.unwrap()],
+            );
+            let sp_res_new =
+                petgraph::algo::astar(graph, cind_new, |n| n == tind_new, |_| 1, |_| 0);
+            match (sp_res_new, sp_res_old) {
+                (None, None) => panic!("disconnected graph in computing mapping heuristic"),
+                (None, Some(_)) => panic!("disconnected graph in computing mapping heuristic"),
+                (Some(_), None) => panic!("disconnected graph in computing mapping heuristic"),
+                (Some((c_new, _)), Some((c_old, _))) => delta += c_new - c_old,
+            }
+        }
+    }
+    return delta as f64;
+}
 
 pub fn nisq_solve_sabre(
     c: &Circuit,
     a: &NisqArchitecture,
 ) -> CompilerResult<NisqGateImplementation> {
     return sabre_solve(
+        c,
+        a,
+        &|s| nisq_transitions(s, a),
+        &nisq_implement_gate,
+        nisq_step_cost,
+        Some(mapping_heuristic),
+        false,
+    );
+}
+
+pub fn nisq_solve_sabre_par(
+    c: &Circuit,
+    a: &NisqArchitecture,
+) -> CompilerResult<NisqGateImplementation> {
+    return sabre_solve_parallel(
+        c,
+        a,
+        &|s| nisq_transitions(s, a),
+        &nisq_implement_gate,
+        nisq_step_cost,
+        Some(mapping_heuristic),
+        false,
+        20,
+    );
+}
+pub fn nisq_solve(c: &Circuit, a: &NisqArchitecture) -> CompilerResult<NisqGateImplementation> {
+    return solve(
         c,
         a,
         &|s| nisq_transitions(s, a),
@@ -157,14 +231,15 @@ pub fn nisq_solve_sabre(
     );
 }
 
-pub fn nisq_solve(c: &Circuit, a: &NisqArchitecture) -> CompilerResult<NisqGateImplementation> {
-    return solve(
+pub fn nisq_solve_cached_heuristic(c: &Circuit, a: &NisqArchitecture) -> CompilerResult<NisqGateImplementation> {
+    return solve_with_cached_heuristic(
         c,
         a,
         &|s| nisq_transitions(s, a),
         nisq_implement_gate,
         nisq_step_cost,
         Some(mapping_heuristic),
+        |map, mv| delta_on_move(map, mv, c, a),
         false,
     );
 }

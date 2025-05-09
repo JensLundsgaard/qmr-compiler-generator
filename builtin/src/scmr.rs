@@ -3,6 +3,7 @@ use std::{
     iter::empty,
 };
 
+use itertools::{sorted, Itertools};
 use petgraph::{algo::all_simple_paths, graph::NodeIndex, Graph};
 use serde::Serialize;
 
@@ -285,9 +286,100 @@ fn scmr_implement_gate_alt(
                 .collect();
             (target_neighbors, msf_neighors)
         }
-        _ =>  (vec![], vec![]),
+        _ => (vec![], vec![]),
     };
     all_paths(arch, starts, ends, blocked).map(|p| ScmrGateImplementation { path: p })
+}
+
+fn mapping_heuristic(arch: &ScmrArchitecture, circ: &Circuit, map: &QubitMap) -> f64 {
+    struct Range {
+        x: (usize, usize),
+        y: (usize, usize),
+    }
+    let mut overlaps = 0;
+    fn get_gate_range(gate: &Gate, arch: &ScmrArchitecture, map: &QubitMap) -> Range {
+        match &gate.operation {
+            Operation::CX => {
+                let (ctrl_x, ctrl_y) = (
+                    map[&gate.qubits[0]].get_index() % arch.width,
+                    (map[&gate.qubits[0]].get_index() / arch.width),
+                );
+                let (tar_x, tar_y) = (
+                    map[&gate.qubits[0]].get_index() % arch.width,
+                    (map[&gate.qubits[0]].get_index() / arch.width),
+                );
+                let x_range = if ctrl_x < tar_x {
+                    (ctrl_x, tar_x)
+                } else {
+                    (tar_x, ctrl_x)
+                };
+                let y_range = if ctrl_y < tar_y {
+                    (ctrl_y, tar_y)
+                } else {
+                    (tar_y, ctrl_y)
+                };
+                return Range {
+                    x: x_range,
+                    y: y_range,
+                };
+            }
+            Operation::T => {
+                let (qubit_x, qubit_y) = (
+                    map[&gate.qubits[0]].get_index() % arch.width,
+                    (map[&gate.qubits[0]].get_index() / arch.width),
+                );
+                let magic_states_2d = arch
+                    .magic_state_qubits
+                    .iter()
+                    .map(|s| (s.get_index() % arch.width, s.get_index() / arch.width));
+                let (msf_x, msf_y) = magic_states_2d
+                    .min_by_key(|(x, y)| {
+                        (*x as isize - qubit_x as isize).abs()
+                            + (*y as isize - qubit_y as isize).abs()
+                    })
+                    .expect("should not be routing T gates with no magic states");
+                let x_range = if msf_x < qubit_x {
+                    (msf_x, qubit_x)
+                } else {
+                    (qubit_x, msf_x)
+                };
+                let y_range = if msf_y < qubit_y {
+                    (msf_y, qubit_y)
+                } else {
+                    (qubit_y, msf_y)
+                };
+                return Range {
+                    x: x_range,
+                    y: y_range,
+                };
+            }
+            Operation::PauliRot { axis, angle } => panic!("did not expect PauliRot gate"),
+            Operation::PauliMeasurement { sign, axis } => {
+                panic!("did not expect PauliMeasure gate")
+            }
+        }
+    }
+    fn overlap(r1: Range, r2: Range) -> bool {
+        if r1.x.0 < r2.x.1 || r2.x.1 < r1.x.0 {
+            return false;
+        }
+        if r1.y.1 < r2.y.0 || r2.y.1 < r1.y.0 {
+            return false;
+        }
+        return true;
+    }
+    let mut c = circ.clone();
+    let layers = circuit_to_layers(&mut c);
+    for layer in layers {
+        for (g1, g2) in layer.iter().tuple_combinations() {
+            let r1 = get_gate_range(g1, arch, map);
+            let r2 = get_gate_range(g2, arch, map);
+            if overlap(r1, r2) {
+                overlaps += 1;
+            }
+        }
+    }
+    return overlaps as f64;
 }
 
 pub fn scmr_solve(c: &Circuit, a: &ScmrArchitecture) -> CompilerResult<ScmrGateImplementation> {
@@ -297,7 +389,7 @@ pub fn scmr_solve(c: &Circuit, a: &ScmrArchitecture) -> CompilerResult<ScmrGateI
         &scmr_transitions,
         scmr_implement_gate_alt,
         scmr_step_cost,
-        None,
+        Some(mapping_heuristic),
         true,
     );
 }

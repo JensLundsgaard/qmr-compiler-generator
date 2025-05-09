@@ -4,6 +4,7 @@ use itertools::{max, Itertools};
 use petgraph::graph::{Node, NodeIndex};
 use petgraph::Direction::Outgoing;
 use petgraph::Graph;
+use rand::seq::IndexedRandom;
 use rand::Rng;
 use regex::Regex;
 use rustworkx_core::steiner_tree::steiner_tree;
@@ -414,12 +415,9 @@ pub fn all_paths<A: Architecture>(
     blocked: Vec<Location>,
 ) -> impl Iterator<Item = Vec<Location>> {
     let (mut graph, mut loc_to_node) = arch.graph();
-    println! {"{:?}", loc_to_node};
-    println!("{:?}", blocked);
     let max_length = graph.node_count();
     for loc in blocked.iter() {
         let old_last = graph[graph.node_indices().last().unwrap()];
-        println! {"{:?}", loc}
         graph.remove_node(loc_to_node[loc]);
         loc_to_node.insert(old_last, loc_to_node[loc]);
         loc_to_node.remove(loc);
@@ -600,6 +598,16 @@ pub fn build_interaction_graph(c: &Circuit) -> Graph<Qubit, usize> {
     }
     return g;
 }
+pub fn circuit_to_layers(c: &mut Circuit) -> Vec<Vec<Gate>> {
+    let mut layers = vec![];
+    while !c.gates.is_empty() {
+        let l = c.get_front_layer();
+        c.remove_gates(&l);
+        layers.push(l);
+
+    }
+    return layers;
+}
 pub fn simulated_anneal<T: Clone>(
     start: T,
     initial_temp: f64,
@@ -620,7 +628,6 @@ pub fn simulated_anneal<T: Clone>(
         let delta_best = next_cost - best_cost;
         let rand: f64 = rand::random();
         if delta_best < 0.0 {
-            println!("current sa score: {}", best_cost);
             best = next.clone();
             best_cost = next_cost;
             current = next;
@@ -628,6 +635,85 @@ pub fn simulated_anneal<T: Clone>(
         } else if rand < (-delta_curr / temp).exp() {
             current = next;
             curr_cost = next_cost;
+        }
+        temp *= cool_rate;
+    }
+    return best;
+}
+
+#[derive(Clone, Copy)]
+pub enum Move {
+    Swap(Qubit, Qubit),
+    IntoOpen(Qubit, Location),
+}
+
+fn random_move<A: Architecture>(map: &QubitMap, arch: &A) -> Move {
+    let mut moves = vec![];
+    for q1 in map.keys() {
+        for q2 in map.keys() {
+            if q1 == q2 {
+                continue;
+            }
+            moves.push(Move::Swap(*q1, *q2));
+        }
+    }
+    for q in map.keys() {
+        for l in arch.locations() {
+            if !map.values().any(|x| *x == l) {
+                moves.push(Move::IntoOpen(*q, l));
+            }
+        }
+    }
+    let rng = &mut rand::rng();
+    let chosen_move = *moves.choose(rng).unwrap();
+    return chosen_move;
+}
+
+pub fn fast_mapping_simulated_anneal<A: Architecture>(
+    start: &QubitMap,
+    arch: &A,
+    initial_temp: f64,
+    term_temp: f64,
+    cool_rate: f64,
+    cost_function: impl Fn(&QubitMap) -> f64,
+    delta_on_move: impl Fn(&QubitMap, Move) -> f64,
+) -> QubitMap {
+    let mut best = start.clone();
+    let mut best_cost = cost_function(&best);
+    let mut current = start.clone();
+    let mut curr_cost = best_cost;
+    let mut temp = initial_temp;
+    let mut best_to_curr = 0.0;
+    while temp > term_temp {
+        let next_move = random_move(&current, arch);
+        let next: HashMap<Qubit, Location> = match next_move {
+            Move::Swap(q1, q2) => {
+                let mut new_map = current.clone();
+                let loc1 = current.get(&q1).unwrap();
+                let loc2 = current.get(&q2).unwrap();
+                new_map.insert(q1, *loc2);
+                new_map.insert(q2, *loc1);
+                new_map
+            }
+            Move::IntoOpen(qubit, location) => {
+                let mut new_map = current.clone();
+                new_map.insert(qubit, location);
+                new_map
+            }
+        };
+        let delta_curr = delta_on_move(&current, next_move);
+        let delta_best = delta_curr + best_to_curr;
+        let rand: f64 = rand::random();
+        if delta_best < 0.0 {
+            best = next.clone();
+            best_cost = best_cost + delta_best;
+            current = next;
+            curr_cost = curr_cost + delta_curr;
+            best_to_curr = curr_cost - best_cost;
+        } else if rand < (-delta_curr / temp).exp() {
+            current = next;
+            curr_cost = curr_cost + delta_curr;
+            best_to_curr = curr_cost - best_cost;
         }
         temp *= cool_rate;
     }
@@ -649,7 +735,7 @@ pub fn swap_random_array_elements<T: Clone>(array: &Vec<T>) -> Vec<T> {
     return new;
 }
 
-pub fn reduced_graph<A: Architecture>(arch: &A) -> Graph<Location, ()>{
+pub fn reduced_graph<A: Architecture>(arch: &A) -> Graph<Location, ()> {
     let (full_graph, index_map) = arch.graph();
     let mut reduced_graph = Graph::new();
     let mut reduced_index_map = HashMap::new();
@@ -663,18 +749,22 @@ pub fn reduced_graph<A: Architecture>(arch: &A) -> Graph<Location, ()>{
             let neighbors = full_graph.neighbors(n);
 
             for (n1, n2) in neighbors.tuple_combinations() {
-                reduced_graph.add_edge(
-                    reduced_index_map[&full_graph[n1]],
-                    reduced_index_map[&full_graph[n2]],
-                    (),
-                );
-                reduced_graph.add_edge(
-                    reduced_index_map[&full_graph[n2]],
-                    reduced_index_map[&full_graph[n1]],
-                    (),
-                );
+                if reduced_index_map.contains_key(&full_graph[n1])
+                    && reduced_index_map.contains_key(&full_graph[n2])
+                {
+                    reduced_graph.add_edge(
+                        reduced_index_map[&full_graph[n1]],
+                        reduced_index_map[&full_graph[n2]],
+                        (),
+                    );
+                    reduced_graph.add_edge(
+                        reduced_index_map[&full_graph[n2]],
+                        reduced_index_map[&full_graph[n1]],
+                        (),
+                    );
+                }
             }
         }
     }
-   return reduced_graph;
+    return reduced_graph;
 }

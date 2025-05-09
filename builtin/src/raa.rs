@@ -356,7 +356,7 @@ pub fn raa_solve_sabre(
         c,
         arch,
         &|s| raa_transitions_dyn_map(s, arch),
-        raa_implement_gate,
+        &raa_implement_gate,
         raa_step_cost,
         None,
         true,

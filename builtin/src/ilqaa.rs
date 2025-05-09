@@ -104,7 +104,7 @@ impl ILQArch {
                                 i * self.width * self.stack_depth + j * self.stack_depth + k1,
                             )];
                             let v2 = index_map[&Location::new(
-                                i * self.width * self.stack_depth + (j - 1) * self.stack_depth + k2,
+                                i * self.width * self.stack_depth + (j + 1) * self.stack_depth + k2,
                             )];
                             g.update_edge(v1, v2, ());
                             g.update_edge(v2, v1, ());
@@ -115,6 +115,39 @@ impl ILQArch {
         }
         return (g, index_map);
     }
+}
+
+pub fn compact_layout(alg_qubit_count: usize, stack_depth: usize) -> ILQArch {
+    let width = (2 * alg_qubit_count.div_ceil(2)) + 1;
+    let height = 5;
+    let mut alg_qubits = Vec::new();
+    for i in (1..width - 1).step_by(2) {
+        alg_qubits.push(Location::new(width + i));
+        alg_qubits.push(Location::new(i + width * 3));
+    }
+    let mut perimeter = Vec::new();
+    let top_edge = (0..width).map(|i| Location::new(i));
+    let right_edge = (1..height).map(|i| Location::new(i * width + width - 1));
+    let bottom_edge = (0..width - 1)
+        .rev()
+        .map(|i| Location::new(i + width * (height - 1)));
+    let left_edge = (1..height - 1).rev().map(|i| Location::new(i * width));
+    perimeter.extend(top_edge);
+    perimeter.extend(right_edge);
+    perimeter.extend(bottom_edge);
+    perimeter.extend(left_edge);
+    // iterate over every other location on the perimeter
+    let mut magic_state_qubits = Vec::new();
+    for i in (1..perimeter.len()).step_by(2) {
+        magic_state_qubits.push(perimeter[i]);
+    }
+    return ILQArch {
+        width,
+        height,
+        alg_qubits,
+        magic_state_qubits,
+        stack_depth,
+    };
 }
 
 #[derive(Debug, PartialEq, Eq, Hash, Serialize, Clone)]
@@ -231,9 +264,9 @@ fn mapping_heuristic(_a: &ILQArch, c: &Circuit, m: &QubitMap) -> f64 {
     let mut cost = 0;
     for gate in &c.gates {
         if gate.operation == Operation::CX
-            && m[&gate.qubits[0]].get_index() / 4 == m[&gate.qubits[1]].get_index() / 4
+            && m[&gate.qubits[0]].get_index() / 4 != m[&gate.qubits[1]].get_index() / 4
         {
-            cost -= 1;
+            cost += 1;
         }
     }
     return cost as f64;

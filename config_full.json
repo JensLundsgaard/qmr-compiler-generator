@@ -1,0 +1,1 @@
+{"alpha":1.0,"beta":1.0,"gamma":1.0,"delta":1.0,"mapping_search_initial_temp":10.0,"mapping_search_term_temp":0.00001,"mapping_search_cool_rate":0.999,"exhaustive_search_threshold":8,"routing_search_initial_temp":10.0,"routing_search_term_temp":0.00001,"routing_search_cool_rate":0.999,"sabre_iterations":3,"isom_search_timeout":300}
