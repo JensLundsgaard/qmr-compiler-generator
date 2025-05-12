@@ -360,10 +360,10 @@ fn mapping_heuristic(arch: &ScmrArchitecture, circ: &Circuit, map: &QubitMap) ->
         }
     }
     fn overlap(r1: Range, r2: Range) -> bool {
-        if r1.x.0 < r2.x.1 || r2.x.1 < r1.x.0 {
+        if r1.x.1 < r2.x.0 || r2.x.1 < r1.x.0 {
             return false;
         }
-        if r1.y.1 < r2.y.0 || r2.y.1 < r1.y.0 {
+        if r1.y.0 < r2.y.1 || r2.y.1 < r1.y.0 {
             return false;
         }
         return true;
