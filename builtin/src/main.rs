@@ -6,7 +6,7 @@ fn nisq_test() {
     let g = utils::graph_from_file("/home/abtin/qmrsl/arch.txt");
     let gp = utils::path_graph(3);
     let arch = nisq::NisqArchitecture::new(gp);
-    let res = nisq::nisq_solve_sabre_par(&circ, &arch);
+    let res = nisq::nisq_solve_joint_optimize_parallel(&circ, &arch);
     println!(
         "{:?}, {:?}, {:?}",
         res.cost, res.transitions, res.steps[0].map

@@ -7,6 +7,7 @@ use petgraph::graph::NodeIndex;
 use rand::seq::IndexedRandom;
 use rayon::prelude::*;
 use std::collections::HashSet;
+use std::hash::DefaultHasher;
 use std::thread;
 use std::time::Duration;
 use std::{collections::HashMap, fmt::Debug};
@@ -174,9 +175,9 @@ fn route<
 >(
     c: &Circuit,
     arch: &A,
-    map: QubitMap,
+    map: &QubitMap,
     transitions: &impl Fn(&Step<G>) -> Vec<R>,
-    implement_gate: impl Fn(&Step<G>, &A, &Gate) -> I,
+    implement_gate: &impl Fn(&Step<G>, &A, &Gate) -> I,
     step_cost: fn(&Step<G>, &A) -> f64,
     map_eval: &impl Fn(&Circuit, &QubitMap) -> f64,
     explore_routing_orders: bool,
@@ -185,7 +186,7 @@ fn route<
     let mut steps = Vec::new();
     let mut trans_taken = Vec::new();
     let mut step_0 = Step {
-        map,
+        map: map.clone(),
         implemented_gates: HashSet::new(),
     };
     let mut current_circ = c.clone();
@@ -333,9 +334,9 @@ pub fn solve<
             return route(
                 c,
                 arch,
-                map,
+                &map,
                 transitions,
-                implement_gate,
+                &implement_gate,
                 step_cost,
                 &route_h,
                 explore_routing_orders,
@@ -347,9 +348,9 @@ pub fn solve<
             return route(
                 c,
                 arch,
-                map,
+                &map,
                 transitions,
-                implement_gate,
+                &implement_gate,
                 step_cost,
                 &|_c, _m| 0.0,
                 explore_routing_orders,
@@ -420,7 +421,7 @@ pub fn sabre_solve<
             let res = route(
                 circ,
                 arch,
-                map,
+                &map,
                 transitions,
                 &implement_gate,
                 step_cost,
@@ -434,7 +435,7 @@ pub fn sabre_solve<
     return route(
         c,
         arch,
-        map,
+        &map,
         transitions,
         &implement_gate,
         step_cost,
@@ -504,7 +505,7 @@ pub fn solve_with_cached_heuristic<
             let res = route(
                 circ,
                 arch,
-                map,
+                &map,
                 transitions,
                 &implement_gate,
                 step_cost,
@@ -518,7 +519,7 @@ pub fn solve_with_cached_heuristic<
     return route(
         c,
         arch,
-        map,
+        &map,
         transitions,
         &implement_gate,
         step_cost,
@@ -541,12 +542,121 @@ pub fn sabre_solve_parallel<
     step_cost: fn(&Step<G>, &A) -> f64,
     mapping_heuristic: Option<fn(&A, &Circuit, &QubitMap) -> f64>,
     explore_routing_orders: bool,
-    num_trials: usize,
 ) -> CompilerResult<G> {
-    (0..num_trials)
+    (0..CONFIG.parallel_searches)
         .into_par_iter()
         .map(|_| {
             sabre_solve(
+                c,
+                arch,
+                transitions,
+                &implement_gate,
+                step_cost,
+                mapping_heuristic,
+                explore_routing_orders,
+            )
+        })
+        .min_by(|a, b| {
+            // if cost is f64, handle NaN/partial_cmp
+            a.cost
+                .partial_cmp(&b.cost)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        })
+        .expect("num_trials should be > 0")
+}
+
+pub fn solve_joint_optimize<
+    A: Architecture + Send + Sync + Clone + 'static,
+    R: Transition<G, A> + Debug,
+    G: GateImplementation + Debug,
+    I: IntoIterator<Item = G>,
+>(
+    c: &Circuit,
+    arch: &A,
+    transitions: &impl Fn(&Step<G>) -> Vec<R>,
+    implement_gate: impl Fn(&Step<G>, &A, &Gate) -> I,
+    step_cost: fn(&Step<G>, &A) -> f64,
+    mapping_heuristic: Option<fn(&A, &Circuit, &QubitMap) -> f64>,
+    explore_routing_orders: bool,
+) -> CompilerResult<G> {
+    let isom_map: Option<HashMap<Qubit, Location>> =
+                incremental_isomorphism_map_with_timeout(
+                    c,
+                    arch,
+                    Duration::from_secs(CONFIG.isom_search_timeout),
+                );
+    let start_map = isom_map.unwrap_or_else(|| random_map(c, arch));
+    let crit_table = &build_criticality_table(c);
+    let route_h: Box<dyn Fn(&Circuit, &QubitMap) -> f64> =
+        if let Some(ref heuristic) = mapping_heuristic {
+            Box::new(|c: &Circuit, m: &QubitMap| heuristic(arch, c, m))
+        } else {
+            Box::new(|_c: &Circuit, _m: &QubitMap| 0.0)
+        };
+    let mut best_res = route(
+        c,
+        arch,
+        &start_map,
+        transitions,
+        &implement_gate,
+        step_cost,
+        &route_h,
+        explore_routing_orders,
+        crit_table,
+    );
+    let mut best_cost = best_res.cost;
+    let mut current_map = start_map;
+    let mut current_cost = best_cost;
+    let mut temp = CONFIG.mapping_search_initial_temp;
+    while temp > CONFIG.mapping_search_term_temp {
+        let next = random_neighbor(&current_map, arch);
+        let next_res = route(
+            c,
+            arch,
+            &next,
+            transitions,
+            &implement_gate,
+            step_cost,
+            &route_h,
+            explore_routing_orders,
+            crit_table,
+        );
+        let next_cost = next_res.cost;
+        let delta_curr = next_cost - current_cost;
+        let delta_best = next_cost - best_cost;
+        let rand: f64 = rand::random();
+        if delta_best < 0.0 {
+            best_res = next_res;
+            best_cost = next_cost;
+            current_map = next;
+            current_cost = next_cost;
+        } else if rand < (-delta_curr / temp).exp() {
+            current_map = next;
+            current_cost = next_cost;
+        }
+        temp *= CONFIG.mapping_search_cool_rate;
+    }
+    return best_res;
+}
+
+pub fn solve_joint_optimize_parallel<
+    A: Architecture + Send + Sync + Clone + 'static,
+    R: Transition<G, A> + Debug,
+    G: GateImplementation + Debug + Send,
+    I: IntoIterator<Item = G>,
+>(
+    c: &Circuit,
+    arch: &A,
+    transitions: &(impl Fn(&Step<G>) -> Vec<R> + std::marker::Sync),
+    implement_gate: impl Fn(&Step<G>, &A, &Gate) -> I + std::marker::Sync + std::marker::Send,
+    step_cost: fn(&Step<G>, &A) -> f64,
+    mapping_heuristic: Option<fn(&A, &Circuit, &QubitMap) -> f64>,
+    explore_routing_orders: bool,
+) -> CompilerResult<G> {
+    (0..CONFIG.parallel_searches)
+        .into_par_iter()
+        .map(|_| {
+            solve_joint_optimize(
                 c,
                 arch,
                 transitions,

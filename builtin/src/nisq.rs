@@ -1,6 +1,6 @@
 use petgraph::{graph::NodeIndex, Graph};
 use serde::Serialize;
-use solver::backend::{sabre_solve, sabre_solve_parallel, solve, solve_with_cached_heuristic};
+use solver::backend::{sabre_solve, sabre_solve_parallel, solve, solve_joint_optimize, solve_joint_optimize_parallel, solve_with_cached_heuristic};
 use solver::structures::*;
 use solver::utils::Move;
 use std::collections::{HashMap, HashSet};
@@ -216,7 +216,6 @@ pub fn nisq_solve_sabre_par(
         nisq_step_cost,
         Some(mapping_heuristic),
         false,
-        20,
     );
 }
 pub fn nisq_solve(c: &Circuit, a: &NisqArchitecture) -> CompilerResult<NisqGateImplementation> {
@@ -240,6 +239,30 @@ pub fn nisq_solve_cached_heuristic(c: &Circuit, a: &NisqArchitecture) -> Compile
         nisq_step_cost,
         Some(mapping_heuristic),
         |map, mv| delta_on_move(map, mv, c, a),
+        false,
+    );
+}
+
+pub fn nisq_solve_joint_optimize(c: &Circuit, a: &NisqArchitecture) -> CompilerResult<NisqGateImplementation> {
+    return solve_joint_optimize(
+        c,
+        a,
+        &|s| nisq_transitions(s, a),
+        nisq_implement_gate,
+        nisq_step_cost,
+        Some(mapping_heuristic),
+        false,
+    );
+}
+
+pub fn nisq_solve_joint_optimize_parallel(c: &Circuit, a: &NisqArchitecture) -> CompilerResult<NisqGateImplementation> {
+    return solve_joint_optimize_parallel(
+        c,
+        a,
+        &|s| nisq_transitions(s, a),
+        nisq_implement_gate,
+        nisq_step_cost,
+        Some(mapping_heuristic),
         false,
     );
 }

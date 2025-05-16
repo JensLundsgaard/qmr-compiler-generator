@@ -43,6 +43,9 @@ pub struct SolverConfig {
 
     #[serde(default = "default_isom_search_timeout")]
     pub isom_search_timeout: u64,
+
+    #[serde(default = "default_parallel_searches")]
+    pub parallel_searches : usize,
 }
 
 impl Default for SolverConfig {
@@ -61,6 +64,7 @@ impl Default for SolverConfig {
             routing_search_cool_rate: default_routing_search_cool_rate(),
             sabre_iterations: default_sabre_iterations(),
             isom_search_timeout: default_isom_search_timeout(),
+            parallel_searches : default_parallel_searches()
         };
     }
 }
@@ -114,6 +118,10 @@ fn default_sabre_iterations() -> usize {
 
 fn default_isom_search_timeout() -> u64 {
     return 300;
+}
+
+fn default_parallel_searches() -> usize{
+    return 32;
 }
 
 pub static CONFIG: Lazy<SolverConfig> = Lazy::new(|| {

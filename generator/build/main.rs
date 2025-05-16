@@ -144,7 +144,7 @@ fn test_program() -> ProblemDefinition {
 }
 
 fn from_file() {
-    let path = env::var("QMRL_PATH").unwrap_or("/home/abtin/qmrsl/qmrl/nisq.qmrl".to_string());
+    let path = env::var("QMRL_PATH").unwrap_or("/home/abtin/qmrsl/qmrl/problem-descriptions/nisq.qmrl".to_string());
     let p = parse::read_file(&path);
     let ast = format!("{:?}", p);
     let _ = std::fs::write("debug", ast.as_bytes());
