@@ -28,6 +28,7 @@ pub fn emit_program(p: ProblemDefinition) -> TokenStream {
     let define_realize_gate_function = emit_realize_gate_function(&p.imp);
     let define_solve_function = emit_solve_function(&p.imp);
     let define_sabre_solve_function = emit_sabre_solve_function(&p.imp);
+    let define_joint_solve_parallel_function = emit_joint_optimize_parallel_function(&p.imp);
     let define_step_cost = emit_step_cost(&p);
     let define_mapping_heuristic = emit_mapping_heuristic();
     quote! {
@@ -47,6 +48,7 @@ pub fn emit_program(p: ProblemDefinition) -> TokenStream {
         #define_mapping_heuristic
         #define_solve_function
         #define_sabre_solve_function
+        #define_joint_solve_parallel_function
 
 
     }
@@ -478,7 +480,7 @@ fn emit_solve_function(imp: &ImplBlock) -> TokenStream {
     let imp_struct_name = syn::Ident::new(&imp.data.name, Span::call_site());
     quote! {
         fn my_solve(c : &Circuit, a : &CustomArch) -> CompilerResult<#imp_struct_name> {
-            return backend::solve(c, a, &|s| available_transitions(a, s), realize_gate, custom_step_cost, Some(mapping_heuristic), #explore_orders);
+            return backend::solve(c, a, &|s| available_transitions(a, s), &realize_gate, custom_step_cost, Some(mapping_heuristic), #explore_orders);
     }
     }
 }
@@ -494,6 +496,21 @@ fn emit_sabre_solve_function(imp: &ImplBlock) -> TokenStream {
     quote! {
         fn my_sabre_solve(c : &Circuit, a : &CustomArch) -> CompilerResult<#imp_struct_name> {
             return backend::sabre_solve(c, a, &|s| available_transitions(a, s), &realize_gate, custom_step_cost, Some(mapping_heuristic), #explore_orders);
+    }
+    }
+}
+
+fn emit_joint_optimize_parallel_function(imp: &ImplBlock) -> TokenStream {
+    let sub_expr = Expr::CallMethod {
+        d: DataType::Step,
+        method: "implemented_gates".to_string(),
+        args: vec![],
+    };
+    let explore_orders = contains_subexpr(&imp.realize, &sub_expr);
+    let imp_struct_name = syn::Ident::new(&imp.data.name, Span::call_site());
+    quote! {
+        fn my_joint_solve_parallel(c : &Circuit, a : &CustomArch) -> CompilerResult<#imp_struct_name> {
+            return backend::solve_joint_optimize_parallel(c, a, &|s| available_transitions(a, s), &realize_gate, custom_step_cost, Some(mapping_heuristic), #explore_orders);
     }
     }
 }

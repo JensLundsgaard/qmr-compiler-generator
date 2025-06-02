@@ -309,7 +309,7 @@ pub fn mqlss_solve(c: &Circuit, a: &MQLSSArchitecture) -> CompilerResult<MQLSSGa
         c,
         a,
         &mqlss_transitions,
-        mqlss_implement_gate,
+        &mqlss_implement_gate,
         mqlsss_step_cost,
         None,
         true,

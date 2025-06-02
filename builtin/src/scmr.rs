@@ -7,7 +7,7 @@ use itertools::{sorted, Itertools};
 use petgraph::{algo::all_simple_paths, graph::NodeIndex, Graph};
 use serde::Serialize;
 
-use solver::{backend::solve, structures::*, utils::*};
+use solver::{backend::{solve, solve_joint_optimize, solve_joint_optimize_parallel, solve_parallel}, structures::*, utils::*};
 #[derive(Debug, Serialize, Clone)]
 pub struct ScmrArchitecture {
     pub width: usize,
@@ -387,9 +387,34 @@ pub fn scmr_solve(c: &Circuit, a: &ScmrArchitecture) -> CompilerResult<ScmrGateI
         c,
         a,
         &scmr_transitions,
-        scmr_implement_gate_alt,
+        &scmr_implement_gate_alt,
         scmr_step_cost,
         Some(mapping_heuristic),
         true,
     );
+}
+
+pub fn scmr_solve_par(c: &Circuit, a: &ScmrArchitecture) -> CompilerResult<ScmrGateImplementation> {
+    return solve_parallel(
+        c,
+        a,
+        &scmr_transitions,
+        &scmr_implement_gate_alt,
+        scmr_step_cost,
+        Some(mapping_heuristic),
+        true,
+    );
+}
+
+pub fn scmr_solve_joint_optimize_parallel(c: &Circuit, a: &ScmrArchitecture) -> CompilerResult<ScmrGateImplementation> {
+        return solve_joint_optimize_parallel(
+        c,
+        a,
+        &scmr_transitions,
+        &scmr_implement_gate_alt,
+        scmr_step_cost,
+        Some(mapping_heuristic),
+        true,
+    );
+
 }

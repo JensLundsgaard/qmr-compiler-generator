@@ -6,7 +6,7 @@ fn nisq_test() {
     let g = utils::graph_from_file("/home/abtin/qmrsl/arch.txt");
     let gp = utils::path_graph(3);
     let arch = nisq::NisqArchitecture::new(gp);
-    let res = nisq::nisq_solve_joint_optimize_parallel(&circ, &arch);
+    let res = nisq::nisq_solve_sabre_par(&circ, &arch);
     println!(
         "{:?}, {:?}, {:?}",
         res.cost, res.transitions, res.steps[0].map
@@ -19,13 +19,13 @@ fn raa_test() {
         width: 3,
         height: 2,
     };
-    println!("{:?}", raa::raa_solve(&circ, &arch));
+    println!("{:?}", raa::raa_joint_optimize_parallel(&circ, &arch));
 }
 
 fn scmr_test() {
     let circ = utils::extract_scmr_gates("/home/abtin/qmrsl/circuits/3_17_13.qasm");
     let arch = scmr::compact_layout(circ.qubits.len());
-    println!("{:?}", scmr::scmr_solve(&circ, &arch).cost);
+    println!("{:?}", scmr::scmr_solve_par(&circ, &arch).cost);
 }
 
 fn ilq_test() {
@@ -42,9 +42,9 @@ fn mqlss_test() {
 }
 
 fn main() {
-    nisq_test();
+    // nisq_test();
     // scmr_test();
-    // raa_test();
+    raa_test();
     // mqlss_test();
     // ilq_test();
 }

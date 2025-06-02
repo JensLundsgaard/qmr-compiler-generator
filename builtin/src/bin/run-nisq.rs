@@ -26,7 +26,7 @@ fn run_nisq(circ_path: &str, arch_path : &str, solve_mode : &str) -> Result<(), 
 fn main() -> Result<(), IOError>  {
     let args: Vec<String> = std::env::args().collect();
     if args.len() != 4 {
-    println!("Usage: run-nisq <circuit> <arch> <solve-mode>g");
+    println!("Usage: run-nisq <circuit> <arch> <solve-mode>");
 }
     run_nisq(&args[1], &args[2], &args[3])
 }

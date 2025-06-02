@@ -221,7 +221,7 @@ pub fn ion_solve(c: &Circuit, a: &IonArch) -> CompilerResult<IonGateImplementati
         c,
         a,
         &|_s| ion_transitions(a),
-        ion_implement_gate,
+        &ion_implement_gate,
         |_s, _a| 0.0,
         Some(mapping_heuristic),
         false,

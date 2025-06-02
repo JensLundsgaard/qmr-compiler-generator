@@ -1,7 +1,7 @@
 use serde::Serialize;
 
 use solver::{
-    backend::{sabre_solve, solve},
+    backend::{sabre_solve, solve, solve_joint_optimize_parallel},
     structures::*,
 };
 use std::collections::{HashMap, HashSet};
@@ -341,7 +341,7 @@ pub fn raa_solve(c: &Circuit, arch: &RaaArchitecture) -> CompilerResult<RaaGateI
         c,
         arch,
         &|s| raa_transitions_dyn_map(s, arch),
-        raa_implement_gate,
+        &raa_implement_gate,
         raa_step_cost,
         None,
         true,
@@ -359,6 +359,43 @@ pub fn raa_solve_sabre(
         &raa_implement_gate,
         raa_step_cost,
         None,
+        true,
+    )
+}
+
+
+fn mapping_heuristic(arch: &RaaArchitecture, c: &Circuit, map: &HashMap<Qubit, Location>) -> f64 {
+    let (graph, index_map) = arch.graph();
+    let mut cost = 0;
+    for gate in &c.gates {
+        let (cpos, tpos) = (map.get(&gate.qubits[0]), map.get(&gate.qubits[1]));
+        let (cind, tind) = (index_map[cpos.unwrap()], index_map[tpos.unwrap()]);
+        let sp_res = petgraph::algo::astar(&graph, cind, |n| n == tind, |_| 1, |_| 0);
+
+        match sp_res {
+            Some((c, _)) => {cost += c;
+                //  println!("gate: {:?}, distance {:?}", gate, c)
+                 }
+            None => panic!(
+                "Disconnected graph. No path found from {:?} to {:?}",
+                cpos, tpos
+            ),
+        }
+    }
+    return cost as f64;
+}
+
+pub fn raa_joint_optimize_parallel(
+    c: &Circuit,
+    arch: &RaaArchitecture,
+) -> CompilerResult<RaaGateImplementation> {
+    solve_joint_optimize_parallel(
+        c,
+        arch,
+        &|s| raa_transitions_dyn_map(s, arch),
+        &raa_implement_gate,
+        raa_step_cost,
+        Some(mapping_heuristic),
         true,
     )
 }

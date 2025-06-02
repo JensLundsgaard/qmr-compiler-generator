@@ -3,12 +3,12 @@ use std::collections::{HashMap, HashSet};
 use petgraph::{graph::NodeIndex, Graph};
 use serde::Serialize;
 use solver::{
-    backend::solve,
+    backend::{solve, solve_joint_optimize_parallel},
     structures::{
         Architecture, Circuit, CompilerResult, Gate, GateImplementation, Location, Operation,
         QubitMap, Step, Transition,
     },
-    utils::{horizontal_neighbors, vertical_neighbors},
+    utils::{all_paths, horizontal_neighbors, vertical_neighbors},
 };
 
 #[derive(Clone)]
@@ -150,6 +150,43 @@ pub fn compact_layout(alg_qubit_count: usize, stack_depth: usize) -> ILQArch {
     };
 }
 
+pub fn square_sparse_layout(alg_qubit_count: usize, stack_depth: usize) -> ILQArch {
+    let agc = alg_qubit_count as f64;
+    let width = 2 * (agc.sqrt().ceil() as usize) + 3;
+    let height = width;
+    let mut alg_qubits = Vec::new();
+    let interior = |coord| coord > 0 && coord < width - 1;
+    for i in 0..width * height {
+        let (x, y) = (i % width, i / width);
+        if interior(x) && interior(y) && x % 2 == 0 && y % 2 == 0 {
+            alg_qubits.push(Location::new(i));
+        }
+    }
+    let mut perimeter = Vec::new();
+    let top_edge = (0..width).map(|i| Location::new(i));
+    let right_edge = (1..height).map(|i| Location::new(i * width + width - 1));
+    let bottom_edge = (0..width - 1)
+        .rev()
+        .map(|i| Location::new(i + width * (height - 1)));
+    let left_edge = (1..height - 1).rev().map(|i| Location::new(i * width));
+    perimeter.extend(top_edge);
+    perimeter.extend(right_edge);
+    perimeter.extend(bottom_edge);
+    perimeter.extend(left_edge);
+    let mut magic_state_qubits = Vec::new();
+    for i in (1..perimeter.len()).step_by(2) {
+        magic_state_qubits.push(perimeter[i]);
+    }
+    return ILQArch {
+        width,
+        height,
+        alg_qubits,
+        magic_state_qubits,
+        stack_depth
+
+    };
+}
+
 #[derive(Debug, PartialEq, Eq, Hash, Serialize, Clone)]
 pub enum ILQGateImplementation {
     Transversal { ctrl: Location, tar: Location },
@@ -187,30 +224,32 @@ fn ilq_implement_gate(
     step: &ILQStep,
     arch: &ILQArch,
     gate: &Gate,
-) -> Option<ILQGateImplementation> {
+) ->  Box<dyn Iterator<Item = ILQGateImplementation>> {
     let (mut graph, mut loc_to_node) = arch.get_graph();
     if gate.operation == Operation::CX
         && (step.map[&gate.qubits[0]].get_index() / arch.stack_depth)
             == (step.map[&gate.qubits[1]].get_index() / arch.stack_depth)
     {
-        return Some(ILQGateImplementation::Transversal {
+        return Box::new(std::iter::once(ILQGateImplementation::Transversal {
             ctrl: step.map[&gate.qubits[0]],
             tar: step.map[&gate.qubits[1]],
-        });
+        }));
     } else {
-        for loc in &arch.magic_state_qubits {
-            assert!(!arch.alg_qubits.clone().into_iter().any(|l| l == *loc));
-            let old_last = graph[graph.node_indices().last().unwrap()];
-            graph.remove_node(loc_to_node[loc]);
-            loc_to_node.insert(old_last, loc_to_node[loc]);
-            loc_to_node.remove(loc);
+        let mut paths: Vec<_> = Vec::new();
+        for gate in &step.implemented_gates{
+            if let ILQGateImplementation::LatticeSurgery { path } = &gate.implementation{
+                paths.extend(path);
+            }
+
         }
-        for loc in step.map.values().into_iter() {
-            let old_last = graph[graph.node_indices().last().unwrap()];
-            graph.remove_node(loc_to_node[loc]);
-            loc_to_node.insert(old_last, loc_to_node[loc]);
-            loc_to_node.remove(loc);
-        }
+
+        let mapped: Vec<_> = step.map.values().cloned().collect();
+        let magic_states = arch.magic_state_qubits.clone();
+        let blocked = mapped
+            .into_iter()
+            .chain(magic_states.into_iter())
+            .chain(paths.into_iter())
+            .collect();
         let (starts, ends) = match &gate.operation {
             Operation::CX => {
                 let (cpos, tpos) = (step.map[&gate.qubits[0]], step.map[&gate.qubits[1]]);
@@ -233,30 +272,7 @@ fn ilq_implement_gate(
             }
             _ => (vec![], vec![]),
         };
-        let mut best: Option<(i32, Vec<NodeIndex>)> = None;
-
-        for start in &starts {
-            for end in &ends {
-                if loc_to_node.contains_key(start) && loc_to_node.contains_key(end) {
-                    let res = petgraph::algo::astar(
-                        &graph,
-                        loc_to_node[&start],
-                        |finish| finish == loc_to_node[&end],
-                        |_e| 1,
-                        |_| 0,
-                    );
-                    if best.is_none()
-                        || ((&res).is_some()
-                            && &res.as_ref().unwrap().0 < &best.as_ref().unwrap().0)
-                    {
-                        best = res;
-                    }
-                }
-            }
-        }
-        return best.map(|(_cost, path)| ILQGateImplementation::LatticeSurgery {
-            path: path.into_iter().map(|n| graph[n]).collect(),
-        });
+        Box::new(all_paths(arch, starts, ends, blocked).map(|p| ILQGateImplementation::LatticeSurgery { path: p }))
     }
 }
 
@@ -277,9 +293,22 @@ pub fn ilq_solve(c: &Circuit, a: &ILQArch) -> CompilerResult<ILQGateImplementati
         c,
         a,
         &ilq_transitions,
-        ilq_implement_gate,
+        &ilq_implement_gate,
         ilq_step_cost,
         Some(mapping_heuristic),
         true,
     );
 }
+
+pub fn ilq_solve_joint_optimize_parallel(c: &Circuit, a: &ILQArch) -> CompilerResult<ILQGateImplementation> {
+    return solve_joint_optimize_parallel(
+        c,
+        a,
+        &ilq_transitions,
+        &ilq_implement_gate,
+        ilq_step_cost,
+        Some(mapping_heuristic),
+        true,
+    );
+}
+

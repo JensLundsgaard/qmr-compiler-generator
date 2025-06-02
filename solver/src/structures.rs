@@ -127,6 +127,13 @@ impl PartialEq for Gate {
 }
 
 impl Circuit {
+
+    pub fn layers(&self) -> Layers {
+        Layers {
+            remaining: self.gates.clone(),
+        }
+    }
+
     pub fn get_front_layer(&self) -> Vec<Gate> {
         let mut blocked_qubits: HashSet<Qubit> = HashSet::new();
         let mut gates = Vec::new();
@@ -150,14 +157,54 @@ impl Circuit {
     }
 }
 
-pub fn circuit_from_gates(gates: Vec<Gate>) -> Circuit {
+
+pub struct Layers {
+    remaining: Vec<Gate>,
+}
+
+impl Iterator for Layers {
+    type Item = Vec<Gate>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.remaining.is_empty() {
+            return None;
+        }
+
+        let mut blocked_qubits: HashSet<Qubit> = HashSet::new();
+        let mut this_layer    = Vec::new();
+        let mut rest          = Vec::new();
+
+        // drain all remaining, partition into layer vs. rest
+        for gate in self.remaining.drain(..) {
+            let gate_qubits = &gate.qubits;
+            let not_blocked = gate_qubits.iter().all(|q| !blocked_qubits.contains(q));
+            if not_blocked {
+                // none of its qubits are blocked → include in this layer
+                this_layer.push(gate.clone());
+            } 
+            else {
+                // had a conflict → defer to next iteration
+                rest.push(gate.clone());
+            }
+            blocked_qubits.extend(gate_qubits);
+
+        }
+
+        // keep the leftovers for the next round
+        self.remaining = rest;
+        Some(this_layer)
+    }
+}
+
+
+pub fn circuit_from_gates(gates: &[Gate]) -> Circuit {
     let mut qubits = HashSet::new();
-    for gate in &gates {
+    for gate in gates {
         for qubit in &gate.qubits {
             qubits.insert(*qubit);
         }
     }
-    return Circuit { gates, qubits };
+    return Circuit { gates: gates.to_vec(), qubits };
 }
 
 pub trait GateImplementation: Clone + Serialize + Hash + Eq + Debug {}

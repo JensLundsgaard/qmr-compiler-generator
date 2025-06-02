@@ -223,7 +223,7 @@ pub fn nisq_solve(c: &Circuit, a: &NisqArchitecture) -> CompilerResult<NisqGateI
         c,
         a,
         &|s| nisq_transitions(s, a),
-        nisq_implement_gate,
+        &nisq_implement_gate,
         nisq_step_cost,
         Some(mapping_heuristic),
         false,
@@ -252,6 +252,7 @@ pub fn nisq_solve_joint_optimize(c: &Circuit, a: &NisqArchitecture) -> CompilerR
         nisq_step_cost,
         Some(mapping_heuristic),
         false,
+        0
     );
 }
 

@@ -16,6 +16,9 @@ pub struct SolverConfig {
 
     #[serde(default = "default_delta")]
     pub delta: f64,
+    
+    #[serde(default = "default_extended_set_weight")]
+    pub extended_set_weight: f64,
 
     #[serde(default = "default_mapping_search_initial_temp")]
     pub mapping_search_initial_temp: f64,
@@ -55,6 +58,7 @@ impl Default for SolverConfig {
             beta: default_beta(),
             gamma: default_gamma(),
             delta: default_delta(),
+            extended_set_weight : default_extended_set_weight(),
             mapping_search_initial_temp: default_mapping_search_initial_temp(),
             mapping_search_term_temp: default_mapping_search_term_temp(),
             mapping_search_cool_rate: default_mapping_search_cool_rate(),
@@ -82,6 +86,10 @@ fn default_gamma() -> f64 {
 }
 fn default_delta() -> f64 {
     return 1.0;
+}
+
+fn default_extended_set_weight() -> f64{
+    return 0.5;
 }
 
 fn default_mapping_search_initial_temp() -> f64 {
@@ -121,7 +129,7 @@ fn default_isom_search_timeout() -> u64 {
 }
 
 fn default_parallel_searches() -> usize{
-    return 32;
+    return 16;
 }
 
 pub static CONFIG: Lazy<SolverConfig> = Lazy::new(|| {

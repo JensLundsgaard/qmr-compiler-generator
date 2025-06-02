@@ -1,15 +1,18 @@
 use crate::config::CONFIG;
 use crate::structures::*;
 use crate::utils::*;
-use core::num;
 use itertools::Itertools;
 use petgraph::graph::NodeIndex;
 use rand::seq::IndexedRandom;
 use rayon::prelude::*;
+use signal_hook::consts::{SIGINT, SIGTERM};
+use signal_hook::flag;
 use std::collections::HashSet;
-use std::hash::DefaultHasher;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
+use std::time::Instant;
 use std::{collections::HashMap, fmt::Debug};
 
 fn random_map<T: Architecture>(c: &Circuit, arch: &T) -> QubitMap {
@@ -75,13 +78,13 @@ fn randomly_extend_partial_map<T: Architecture>(c: &Circuit, arch: &T, map: &Qub
 
 fn incremental_isomorphism_map<T: Architecture>(c: &Circuit, arch: &T) -> Option<QubitMap> {
     let mut gates = &c.gates[..1];
-    let mut prefix_circuit = circuit_from_gates(gates.to_vec());
+    let mut prefix_circuit = circuit_from_gates(gates);
     let mut isom_map = None;
     let mut candidate = isomorphism_map(&prefix_circuit, arch);
     let mut i = 1;
     while candidate.is_some() && i < c.gates.len() {
         gates = &c.gates[..i];
-        prefix_circuit = circuit_from_gates(gates.to_vec());
+        prefix_circuit = circuit_from_gates(gates);
         candidate = isomorphism_map(&prefix_circuit, arch);
         if candidate.is_some() {
             let full_map = candidate
@@ -251,7 +254,8 @@ fn find_best_next_step<
     let mut best_cost = std::f64::MAX;
     for trans in transitions(last_step) {
         let mut next_step = trans.apply(last_step);
-        let executable = c.get_front_layer();
+        let executable = c.layers().next().unwrap_or(vec![]);
+        let next_layer = c.layers().next().unwrap_or(vec![]);
         if explore_routing_orders {
             next_step.max_step_all_orders(&executable, arch, &implement_gate, crit_table);
         } else {
@@ -259,7 +263,9 @@ fn find_best_next_step<
         }
         let s_cost = step_cost(&next_step, arch);
         let t_cost = trans.cost(arch);
-        let m_cost = map_eval(&circuit_from_gates(executable), &next_step.map);
+        let front_layer_cost  = map_eval(&circuit_from_gates(&executable), &next_step.map)/(executable.len() as f64);
+        let next_layer_cost =  map_eval(&circuit_from_gates(&next_layer), &next_step.map)/(next_layer.len() as f64);
+        let m_cost = front_layer_cost+CONFIG.extended_set_weight*next_layer_cost;
         let total_criticality: usize = next_step
             .gates()
             .into_iter()
@@ -296,7 +302,7 @@ pub fn solve<
     c: &Circuit,
     arch: &A,
     transitions: &impl Fn(&Step<G>) -> Vec<R>,
-    implement_gate: fn(&Step<G>, &A, &Gate) -> I,
+    implement_gate: &impl Fn(&Step<G>, &A, &Gate) -> I,
     step_cost: fn(&Step<G>, &A) -> f64,
     mapping_heuristic: Option<fn(&A, &Circuit, &QubitMap) -> f64>,
     explore_routing_orders: bool,
@@ -529,6 +535,43 @@ pub fn solve_with_cached_heuristic<
     );
 }
 
+pub fn solve_parallel<
+    A: Architecture + Send + Sync + Clone + 'static,
+    R: Transition<G, A> + Debug,
+    G: GateImplementation + Debug + Send,
+    I: IntoIterator<Item = G>,
+>(
+    c: &Circuit,
+    arch: &A,
+    transitions: &(impl Fn(&Step<G>) -> Vec<R> + std::marker::Sync),
+    implement_gate: impl Fn(&Step<G>, &A, &Gate) -> I + std::marker::Sync + std::marker::Send,
+    step_cost: fn(&Step<G>, &A) -> f64,
+    mapping_heuristic: Option<fn(&A, &Circuit, &QubitMap) -> f64>,
+    explore_routing_orders: bool,
+) -> CompilerResult<G>
+{
+    (0..CONFIG.parallel_searches)
+        .into_par_iter()
+        .map(|_| {
+            solve(
+                c,
+                arch,
+                transitions,
+                &implement_gate,
+                step_cost,
+                mapping_heuristic,
+                explore_routing_orders,
+            )
+        })
+        .min_by(|a, b| {
+            // if cost is f64, handle NaN/partial_cmp
+            a.cost
+                .partial_cmp(&b.cost)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        })
+        .expect("num_trials should be > 0")
+}
+
 pub fn sabre_solve_parallel<
     A: Architecture + Send + Sync + Clone + 'static,
     R: Transition<G, A> + Debug,
@@ -578,21 +621,29 @@ pub fn solve_joint_optimize<
     step_cost: fn(&Step<G>, &A) -> f64,
     mapping_heuristic: Option<fn(&A, &Circuit, &QubitMap) -> f64>,
     explore_routing_orders: bool,
+    id : usize
 ) -> CompilerResult<G> {
-    let isom_map: Option<HashMap<Qubit, Location>> =
-                incremental_isomorphism_map_with_timeout(
-                    c,
-                    arch,
-                    Duration::from_secs(CONFIG.isom_search_timeout),
-                );
+    let start = Instant::now();
+    // register SIGINT/SIGTERM handler
+    let terminate = Arc::new(AtomicBool::new(false));
+    flag::register(SIGINT, Arc::clone(&terminate)).expect("Failed to register SIGINT handler");
+    flag::register(SIGTERM, Arc::clone(&terminate)).expect("Failed to register SIGTERM handler");
+
+    let isom_map: Option<HashMap<Qubit, Location>> = incremental_isomorphism_map_with_timeout(
+        c,
+        arch,
+        Duration::from_secs(CONFIG.isom_search_timeout),
+    );
     let start_map = isom_map.unwrap_or_else(|| random_map(c, arch));
     let crit_table = &build_criticality_table(c);
     let route_h: Box<dyn Fn(&Circuit, &QubitMap) -> f64> =
         if let Some(ref heuristic) = mapping_heuristic {
-            Box::new(|c: &Circuit, m: &QubitMap| heuristic(arch, c, m))
+            Box::new(move |c, m| heuristic(arch, c, m))
         } else {
-            Box::new(|_c: &Circuit, _m: &QubitMap| 0.0)
+            Box::new(|_, _| 0.0)
         };
+
+    // initial solution
     let mut best_res = route(
         c,
         arch,
@@ -608,7 +659,23 @@ pub fn solve_joint_optimize<
     let mut current_map = start_map;
     let mut current_cost = best_cost;
     let mut temp = CONFIG.mapping_search_initial_temp;
+
+    let _ = serde_json::to_writer(std::io::stdout(), &best_res).map_err(IOError::OutputErr);
+    let current_time = Instant::now();
+    println!("\nElapsed time: {}", Duration::as_secs(&(current_time - start)));
+    println!("Thread: {}", id);
+    // simulated annealing loop
     while temp > CONFIG.mapping_search_term_temp {
+        // check for SIGINT/SIGTERM
+        if terminate.load(Ordering::Relaxed) {
+            eprintln!(
+                "Termination signal received in thread {}— returning best solution so far (cost = {})",
+                id,
+                best_cost
+            );
+            break;
+        }
+
         let next = random_neighbor(&current_map, arch);
         let next_res = route(
             c,
@@ -622,21 +689,29 @@ pub fn solve_joint_optimize<
             crit_table,
         );
         let next_cost = next_res.cost;
+
         let delta_curr = next_cost - current_cost;
         let delta_best = next_cost - best_cost;
-        let rand: f64 = rand::random();
+        let accept = rand::random::<f64>() < (-delta_curr / temp).exp();
+
         if delta_best < 0.0 {
             best_res = next_res;
             best_cost = next_cost;
             current_map = next;
             current_cost = next_cost;
-        } else if rand < (-delta_curr / temp).exp() {
+            let _ = serde_json::to_writer(std::io::stdout(), &best_res).map_err(IOError::OutputErr);
+            let current_time = Instant::now();
+            println!("\nElapsed time: {}", Duration::as_secs(&(current_time - start)));
+            println!("Thread: {}", id);
+        } else if accept {
             current_map = next;
             current_cost = next_cost;
         }
+
         temp *= CONFIG.mapping_search_cool_rate;
     }
-    return best_res;
+
+    best_res
 }
 
 pub fn solve_joint_optimize_parallel<
@@ -655,7 +730,8 @@ pub fn solve_joint_optimize_parallel<
 ) -> CompilerResult<G> {
     (0..CONFIG.parallel_searches)
         .into_par_iter()
-        .map(|_| {
+        .enumerate()
+        .map(|(id, _)| {
             solve_joint_optimize(
                 c,
                 arch,
@@ -664,6 +740,7 @@ pub fn solve_joint_optimize_parallel<
                 step_cost,
                 mapping_heuristic,
                 explore_routing_orders,
+                id
             )
         })
         .min_by(|a, b| {

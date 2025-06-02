@@ -1,5 +1,5 @@
 use solver::utils::{self, IOError};
-use builtin::raa::{self, raa_solve, raa_solve_sabre};
+use builtin::raa::{self, raa_joint_optimize_parallel, raa_solve, raa_solve_sabre};
 use serde_json;
 
 
@@ -10,6 +10,7 @@ fn run_raa(circ_path: &str, solve_mode : &str) -> Result<(), IOError> {
     let res =   match solve_mode {
         "--sabre" => Ok(raa_solve_sabre(&circ, &arch)),
         "--onepass" => Ok(raa_solve(&circ, &arch)),
+        "--joint-optimize-par" => Ok(raa_joint_optimize_parallel(&circ, &arch)),
         _ => Err(IOError::InputErr)
     }?;
     serde_json::to_writer(std::io::stdout(), &res).map_err(IOError::OutputErr)
