@@ -31,7 +31,8 @@ GateRealization[
                                         Step.map[x], Arch.width, Arch.height), Gate.y_indices())))
                                     .extend(map(|x| -> horizontal_neighbors(
                                         Step.map[x], Arch.width), Gate.y_indices())))
-                                    .extend(map(|x| -> horizontal_neighbors(x, arch.width), Arch.magic_state_qubits())),
+                                    .extend(map(|x| -> horizontal_neighbors(x, arch.width), 
+                                                Arch.magic_state_qubits())),
                   ((values(Step.map())).extend(Arch.magic_state_qubits()))
                   .extend(fold(Vec(), |x, acc| -> acc.extend(x), 
                   map(|x| -> x.implementation.(tree()), Step.implemented_gates()))))
@@ -48,9 +49,9 @@ Transition[
 ]
 
 Architecture[
-    name = 'MQLSSArch'
-    data = (magic_state_qubits : Vec<Location>, alg_qubits : Vec<Location>, width : Int, height : Int)
-    get_locations = Arch.alg_qubits()
+  name = 'MQLSSArch'
+  data = (magic_state_qubits : Vec<Location>, alg_qubits : Vec<Location>, width : Int, height : Int)
+  get_locations = Arch.alg_qubits()
 ]
 
 Step[

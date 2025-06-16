@@ -266,8 +266,9 @@ fn expr_parser() -> impl Parser<char, ast::Expr, Error = Simple<char>> {
             });
         let fold = just("fold(")
             .padded()
-            .ignore_then(expr_parser.clone())
-            .then_ignore(just(", |x, acc| ->").padded())
+            .ignore_then(expr_parser.clone().padded())
+            .then_ignore(just(",").padded()) 
+            .then_ignore(just("|x, acc| ->").padded())
             .then(expr_parser.clone())
             .then_ignore(just(",").padded())
             .then(expr_parser.clone())
@@ -346,9 +347,9 @@ fn expr_parser() -> impl Parser<char, ast::Expr, Error = Simple<char>> {
             .map(|((d, method), args)| ast::Expr::CallMethod { d, method, args });
 
         let call_function = method_name()
-            .then_ignore(just("("))
+            .then_ignore(just("(").padded())
             .then(expr_parser.clone().separated_by(just(",").padded()))
-            .then_ignore(just(")"))
+            .then_ignore(just(")").padded())
             .map(|(func, args)| ast::Expr::CallFunction { func, args });
 
         let ite = keyword("if")
