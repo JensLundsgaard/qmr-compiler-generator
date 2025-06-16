@@ -4,7 +4,7 @@ use rustworkx_core::{
     steiner_tree::steiner_tree,
 };
 use serde::Serialize;
-use solver::{backend::solve, structures::*, utils::*};
+use solver::{backend::{solve, solve_joint_optimize_parallel}, structures::*, utils::*};
 use std::collections::{HashMap, HashSet};
 #[derive(Clone)]
 pub struct MQLSSArchitecture {
@@ -306,6 +306,18 @@ fn mqlss_implement_gate(
 
 pub fn mqlss_solve(c: &Circuit, a: &MQLSSArchitecture) -> CompilerResult<MQLSSGateImplementation> {
     return solve(
+        c,
+        a,
+        &mqlss_transitions,
+        &mqlss_implement_gate,
+        mqlsss_step_cost,
+        None,
+        true,
+    );
+}
+
+pub fn mqlss_solve_joint_optimize_parallel(c: &Circuit, a: &MQLSSArchitecture) -> CompilerResult<MQLSSGateImplementation> {
+    return solve_joint_optimize_parallel(
         c,
         a,
         &mqlss_transitions,

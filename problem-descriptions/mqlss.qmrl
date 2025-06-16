@@ -2,33 +2,40 @@ GateRealization[
     routed_gates = Pauli
     name='MQLSSGate'
     data= (tree : Vec<Location>)
-    realize_gate = if ((Gate.gate_type) == PauliRot{.., ..}) 
+    realize_gate = if (Gate.gate_type())==(PauliMeasurement)
     then
-        map(|x| -> GateRealization{tree = x},
-            steiner_trees(
-                arch, 
-                (map(|x| -> horizontal_neighbors(Step.map[x], Arch.width, Arch.height)), Gate.x_indices).append(
-                (map(|x| -> vertical_neighbors(Step.map[x], Arch.width, Arch.height), Gate.z_indices)).append(
-                (map(|x| -> vertical_neighbors(Step.map[x], Arch.width, Arch.height), Gate.y_indices)).append(
-                 map(|x| -> horizontal_neighbor(Step.map[x], Arch.width, Arch.height), Gate.y_indices)
-                ))), 
-                ((values(Step.map())).extend(Arch.magic_state_qubits())).extend(fold(Vec(), |x, acc| -> acc.extend(x), map(|x| -> x.implementation.(path()), Step.implemented_gates())))
-                )
+      map(|x| -> GateRealization{tree = x}, 
+      steiner_trees(arch, ((((Vec())
+                                    .extend(map(|x| -> horizontal_neighbors(
+                                        Step.map[x], Arch.width), Gate.x_indices())))
+                                    .extend(map(|x| -> vertical_neighbors(
+                                        Step.map[x], Arch.width, Arch.height), Gate.z_indices())))
+                                    .extend(map(|x| -> vertical_neighbors(
+                                        Step.map[x], Arch.width, Arch.height), Gate.y_indices())))
+                                    .extend(map(|x| -> horizontal_neighbors(
+                                        Step.map[x], Arch.width), Gate.y_indices())),
+                  ((values(Step.map()))
+                  .extend(Arch.magic_state_qubits()))
+                  .extend(fold(Vec(), 
+                  |x, acc| -> acc.extend(x), 
+                  map(|x| -> x.implementation.(tree()), Step.implemented_gates()))))
         )
     else 
-        map(|x| -> GateRealization{tree = x},
-            steiner_trees(
-                arch, 
-                fold(Vec(), |x, acc| -> acc.extend(x), map(|x| -> horizontal_neighbors(x, arch.width), Arch.magic_state_qubits())).extend( 
-                (map(|x| -> horizontal_neighbors(Step.map[x], Arch.width, Arch.height)), Gate.x_indices).extend(
-                (map(|x| -> vertical_neighbors(Step.map[x], Arch.width, Arch.height), Gate.z_indices)).extend(
-                (map(|x| -> vertical_neighbors(Step.map[x], Arch.width, Arch.height), Gate.y_indices)).extend(
-                 map(|x| -> horizontal_neighbor(Step.map[x], Arch.width, Arch.height), Gate.y_indices)
-                )))), 
-                ((values(Step.map())).extend(Arch.magic_state_qubits())).extend(fold(Vec(), |x, acc| -> acc.extend(x), map(|x| -> x.implementation.(path()), Step.implemented_gates())))
-                )
+      map(|x| -> GateRealization{tree = x}, 
+      steiner_trees(arch, (((((Vec())
+                                    .extend(map(|x| -> horizontal_neighbors(
+                                        Step.map[x], Arch.width), Gate.x_indices())))
+                                    .extend(map(|x| -> vertical_neighbors(
+                                        Step.map[x], Arch.width, Arch.height), Gate.z_indices())))
+                                    .extend(map(|x| -> vertical_neighbors(
+                                        Step.map[x], Arch.width, Arch.height), Gate.y_indices())))
+                                    .extend(map(|x| -> horizontal_neighbors(
+                                        Step.map[x], Arch.width), Gate.y_indices())))
+                                    .extend(map(|x| -> horizontal_neighbors(x, arch.width), Arch.magic_state_qubits())),
+                  ((values(Step.map())).extend(Arch.magic_state_qubits()))
+                  .extend(fold(Vec(), |x, acc| -> acc.extend(x), 
+                  map(|x| -> x.implementation.(tree()), Step.implemented_gates()))))
         )
-        
  ]
 
 Transition[

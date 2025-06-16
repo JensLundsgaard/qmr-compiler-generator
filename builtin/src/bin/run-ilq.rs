@@ -1,5 +1,3 @@
-use core::arch;
-
 use builtin::ilqaa::{ilq_solve, ilq_solve_joint_optimize_parallel};
 use serde_json;
 use solver::utils::{self, IOError};

@@ -5,13 +5,17 @@ GateRealization[
     realize_gate =  
     if (Gate.gate_type()) == CX 
         then 
-            map(|x| -> GateRealization{path = x}, 
-            all_paths(arch, vertical_neighbors(Step.map[Gate.qubits[0]], Arch.width, Arch.height), 
-            horizontal_neighbors(Step.map[Gate.qubits[1]], arch.width), 
-            ((values(Step.map())).extend(Arch.magic_state_qubits()))
-            .extend(fold(Vec(), |x, acc| -> acc.extend(x), 
-            map(|x| -> x.implementation.(path()), Step.implemented_gates())))))
-        else   
+            if Step.map[Gate.qubits[0]] / Arch.stack_size == Step.map[Gate.qubits[1]] / Arch.stack_size
+                then GateRealization{
+                    path = ((Vec()).push(Step.map[Gate.qubits[0]])).push(Step.map[Gate.qubits[1]])}
+                else 
+                    map(|x| -> GateRealization{path = x}, 
+                    all_paths(arch, vertical_neighbors(Step.map[Gate.qubits[0]], Arch.width, Arch.height), 
+                    horizontal_neighbors(Step.map[Gate.qubits[1]], arch.width), 
+                    ((values(Step.map())).extend(Arch.magic_state_qubits()))
+                    .extend(fold(Vec(), |x, acc| -> acc.extend(x), 
+                    map(|x| -> x.implementation.(path()), Step.implemented_gates())))))
+    else   
             map(|x| -> GateRealization{path = x}, 
                 all_paths(arch, 
                           vertical_neighbors(Step.map[Gate.qubits[0]], Arch.width, Arch.height), 
@@ -33,8 +37,8 @@ Transition[
 ]
 
 Architecture[
-    name = 'ScmrArch'
-    data = (magic_state_qubits : Vec<Location>, alg_qubits : Vec<Location>, width : Int, height : Int)
+    name = 'ILQArch'
+    data = (magic_state_qubits : Vec<Location>, alg_qubits : Vec<Location>, width : Int, height : Int, stack_size : Int)
     get_locations = Arch.alg_qubits()
 ]
 

@@ -38,13 +38,13 @@ fn mqlss_test() {
     let circ = utils::extract_gates("/home/abtin/qmrsl/pbc-circuits/3_17_13.pbc", &["Pauli"]);
     println!("{:?}", circ);
     let arch = mqlss::square_sparse_layout(circ.qubits.len());
-    println!("{:?}", mqlss::mqlss_solve(&circ, &arch).cost);
+    println!("{:?}", mqlss::mqlss_solve_joint_optimize_parallel(&circ, &arch).cost);
 }
 
 fn main() {
     // nisq_test();
     // scmr_test();
-    raa_test();
-    // mqlss_test();
+   // raa_test();
+    mqlss_test();
     // ilq_test();
 }

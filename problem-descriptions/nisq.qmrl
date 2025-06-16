@@ -7,7 +7,6 @@ GateRealization[
             else None
 ]
 
-
 Transition[
     name = 'Swap'
     data = (edge : (Location,Location))
