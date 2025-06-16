@@ -157,8 +157,9 @@ pub fn extract_gates(filename: &str, gate_types: &[&str]) -> Circuit {
                     let axis_str = c.get(1).unwrap().as_str();
                     let numerator = c.get(2).unwrap().as_str().parse::<isize>().unwrap();
                     let denominator = c.get(3).unwrap().as_str().parse::<usize>().unwrap();
-                    let axis = axis_str.chars().map(parse_pauli_term).collect();
-                    let gate_qubits: Vec<Qubit> = (0..axis_str.len()).map(Qubit::new).collect();
+                    let axis: Vec<PauliTerm> = axis_str.chars().map(parse_pauli_term).collect();
+                    let nontrivial_indices = (0..axis.len()).filter(|ind| axis[*ind] != PauliTerm::PauliI);
+                    let gate_qubits: Vec<Qubit> = nontrivial_indices.map(Qubit::new).collect();
                     qubits.extend(gate_qubits.iter());
                     Gate {
                         operation: Operation::PauliRot {
@@ -178,11 +179,9 @@ pub fn extract_gates(filename: &str, gate_types: &[&str]) -> Circuit {
                     let sign_str = c.get(1).unwrap().as_str();
                     let sign = sign_str != "-";
                     let axis_str = c.get(2).unwrap().as_str();
-                    let axis = axis_str.chars().map(parse_pauli_term).collect();
-                    let gate_qubits: Vec<Qubit> = (0..axis_str.len())
-                        .filter(|&ind| axis_str.chars().nth(ind).unwrap() != 'I')
-                        .map(Qubit::new)
-                        .collect();
+                    let axis: Vec<PauliTerm> = axis_str.chars().map(parse_pauli_term).collect();
+                    let nontrivial_indices = (0..axis.len()).filter(|ind| axis[*ind] != PauliTerm::PauliI);
+                    let gate_qubits: Vec<Qubit> = nontrivial_indices.map(Qubit::new).collect();
                     qubits.extend(gate_qubits.iter());
                     Gate {
                         operation: Operation::PauliMeasurement { sign, axis },
