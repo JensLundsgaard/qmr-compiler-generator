@@ -118,8 +118,18 @@ pub enum Expr {
 
     MapAccess(Box<Expr>),
 
-    Equal(Box<Expr>, Box<Expr>),
+    BinOp(BinOp, Box<Expr>, Box<Expr>),
 }
+
+#[derive(Debug, PartialEq, PartialOrd)]
+pub enum BinOp {
+    Equals,
+    Div, 
+    Mult,
+    Plus, 
+    Minus
+}
+
 #[derive(Debug, PartialEq, PartialOrd)]
 pub enum AccessExpr {
     Access(String, Box<AccessChain>),

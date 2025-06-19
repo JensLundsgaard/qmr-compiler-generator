@@ -94,7 +94,7 @@ fn contains_subexpr(e: &Expr, subexpr: &Expr) -> bool {
             vec.iter().any(|(_, expr)| contains_subexpr(expr, subexpr))
         }
         Expr::Ident(_) => false,
-        Expr::Equal(expr, expr1) => {
+        Expr::BinOp(op, expr, expr1) => {
             contains_subexpr(expr, subexpr) || contains_subexpr(expr1, subexpr)
         }
         Expr::IndexLiteral(_) => false,
@@ -756,7 +756,7 @@ fn emit_expr(
                 _ => quote! {#var_name},
             }
         }
-        Expr::Equal(expr, expr1) => {
+        Expr::BinOp(op, expr, expr1) => {
             let left = emit_expr(
                 expr,
                 context,
@@ -771,7 +771,13 @@ fn emit_expr(
                 &imp_struct_name,
                 bound_var,
             );
-            quote! {#left == #right}
+            match op{
+                BinOp::Equals => quote! {#left == #right},
+                BinOp::Div => quote! {#left / #right},
+                BinOp::Mult => quote! {#left * #right},
+                BinOp::Plus => quote! {#left + #right},
+                BinOp::Minus => quote! {#left - #right},
+            }
         }
         Expr::IndexLiteral(i) => {
             let unsuffixed = syn::Index::from(*i);

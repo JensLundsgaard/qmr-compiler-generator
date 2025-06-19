@@ -9,7 +9,11 @@ use serde::Serialize;
 use std::collections::{HashMap, HashSet};
 use std::fmt::Debug;
 use std::hash::Hash;
+use std::ops::Add;
+use std::ops::Div;
 use std::ops::Index;
+use std::ops::Mul;
+use std::ops::Sub;
 
 #[derive(Hash, PartialEq, Eq, Clone, Copy, Debug, Serialize)]
 pub struct Qubit(usize);
@@ -30,6 +34,70 @@ impl<T> Index<Location> for Vec<T> {
 
     fn index(&self, loc: Location) -> &Self::Output {
         &self[loc.get_index()]
+    }
+}
+
+// Implement +
+impl Add for Location {
+    type Output = Location;
+
+    fn add(self, rhs: Location) -> Location {
+        Location(self.0 + rhs.0)
+    }
+}
+
+// Implement -
+impl Sub for Location {
+    type Output = Location;
+
+    fn sub(self, rhs: Location) -> Location {
+        Location(self.0 - rhs.0)
+    }
+}
+
+// Implement *
+impl Mul for Location {
+    type Output = Location;
+
+    fn mul(self, rhs: Location) -> Location {
+        Location(self.0 * rhs.0)
+    }
+}
+
+// Implement /
+impl Div for Location {
+    type Output = Location;
+
+    fn div(self, rhs: Location) -> Location {
+        Location(self.0 / rhs.0)
+    }
+}
+
+impl Add<usize> for Location {
+    type Output = Location;
+    fn add(self, rhs: usize) -> Location {
+        Location(self.0 + rhs)
+    }
+}
+
+impl Sub<usize> for Location {
+    type Output = Location;
+    fn sub(self, rhs: usize) -> Location {
+        Location(self.0 - rhs)
+    }
+}
+
+impl Mul<usize> for Location {
+    type Output = Location;
+    fn mul(self, rhs: usize) -> Location {
+        Location(self.0 * rhs)
+    }
+}
+
+impl Div<usize> for Location {
+    type Output = Location;
+    fn div(self, rhs: usize) -> Location {
+        Location(self.0 / rhs)
     }
 }
 
@@ -127,7 +195,6 @@ impl PartialEq for Gate {
 }
 
 impl Circuit {
-
     pub fn layers(&self) -> Layers {
         Layers {
             remaining: self.gates.clone(),
@@ -157,7 +224,6 @@ impl Circuit {
     }
 }
 
-
 pub struct Layers {
     remaining: Vec<Gate>,
 }
@@ -171,8 +237,8 @@ impl Iterator for Layers {
         }
 
         let mut blocked_qubits: HashSet<Qubit> = HashSet::new();
-        let mut this_layer    = Vec::new();
-        let mut rest          = Vec::new();
+        let mut this_layer = Vec::new();
+        let mut rest = Vec::new();
 
         // drain all remaining, partition into layer vs. rest
         for gate in self.remaining.drain(..) {
@@ -181,13 +247,11 @@ impl Iterator for Layers {
             if not_blocked {
                 // none of its qubits are blocked → include in this layer
                 this_layer.push(gate.clone());
-            } 
-            else {
+            } else {
                 // had a conflict → defer to next iteration
                 rest.push(gate.clone());
             }
             blocked_qubits.extend(gate_qubits);
-
         }
 
         // keep the leftovers for the next round
@@ -196,7 +260,6 @@ impl Iterator for Layers {
     }
 }
 
-
 pub fn circuit_from_gates(gates: &[Gate]) -> Circuit {
     let mut qubits = HashSet::new();
     for gate in gates {
@@ -204,7 +267,10 @@ pub fn circuit_from_gates(gates: &[Gate]) -> Circuit {
             qubits.insert(*qubit);
         }
     }
-    return Circuit { gates: gates.to_vec(), qubits };
+    return Circuit {
+        gates: gates.to_vec(),
+        qubits,
+    };
 }
 
 pub trait GateImplementation: Clone + Serialize + Hash + Eq + Debug {}

@@ -1,3 +1,5 @@
+use std::collections::binary_heap;
+
 use chumsky::prelude::*;
 use text::keyword;
 
@@ -86,6 +88,16 @@ fn gate_type_parser() -> impl Parser<char, Vec<ast::GateType>, Error = Simple<ch
         .or(just("T").map(|_| ast::GateType::T))
         .or(just("Pauli").map(|_| ast::GateType::Pauli));
     gate_type.separated_by(just(",").padded()).at_least(1)
+}
+
+fn bin_op_parser() -> impl Parser<char, ast::BinOp, Error = Simple<char>>{
+     just("==")
+        .map(|_| ast::BinOp::Equals)
+        .or(just("/").map(|_| ast::BinOp::Div))
+        .or(just("*").map(|_| ast::BinOp::Mult))
+        .or(just("-").map(|_| ast::BinOp::Minus))
+        .or(just("+").map(|_| ast::BinOp::Plus))
+    
 }
 
 fn impl_block_parser() -> impl Parser<char, ast::ImplBlock, Error = Simple<char>> {
@@ -434,12 +446,12 @@ fn expr_parser() -> impl Parser<char, ast::Expr, Error = Simple<char>> {
             tuple.clone(),
             expr_parser.clone().delimited_by(just("("), just(")")),
         ));
-        let equality_comparison = atom
-            .then_ignore(just("==").padded())
+        let bin_op = atom
+            .then(bin_op_parser().padded())
             .then(expr_parser.clone())
-            .map(|(a, b)| ast::Expr::Equal(Box::new(a), Box::new(b)));
+            .map(|((a, op), b)| ast::Expr::BinOp(op, Box::new(a), Box::new(b)));
         let expr = choice((
-            equality_comparison,
+            bin_op,
             ite,
             option_match,
             map_access,

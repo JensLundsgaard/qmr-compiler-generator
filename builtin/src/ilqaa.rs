@@ -324,27 +324,41 @@ fn ilq_implement_gate(
             .chain(magic_states.into_iter())
             .chain(paths.into_iter())
             .collect();
-        let (starts, ends) = match &gate.operation {
+        let mut starts = Vec::new();
+        let mut ends = Vec::new();
+        match &gate.operation {
             Operation::CX => {
                 let (cpos, tpos) = (step.map[&gate.qubits[0]], step.map[&gate.qubits[1]]);
-                (
-                    vertical_neighbors(cpos, arch.width, arch.height),
-                    horizontal_neighbors(tpos, arch.width),
-                )
+                for k in 0..arch.stack_depth{
+                    for n in vertical_neighbors(cpos/arch.stack_depth, arch.width, arch.height){
+                        starts.push(Location::new(n.get_index()*arch.stack_depth + k));
+                    }
+                    for n in horizontal_neighbors(tpos/arch.stack_depth, arch.width){
+                        ends.push(Location::new(n.get_index()*arch.stack_depth + k));
+                }
             }
+        }
             Operation::T => {
                 let pos = step.map[&gate.qubits[0]];
-                let target_neighbors = vertical_neighbors(pos, arch.width, arch.height);
-                let msf_neighors = arch
+                let target_neighbors = vertical_neighbors(pos/arch.stack_depth, arch.width, arch.height);
+                let msf_neighors : Vec<Location> = arch
                     .magic_state_qubits
                     .clone()
                     .into_iter()
-                    .map(|m| horizontal_neighbors(m, arch.width))
+                    .map(|m| horizontal_neighbors(m/arch.stack_depth, arch.width))
                     .flatten()
                     .collect();
-                (target_neighbors, msf_neighors)
+                
+                for k in 0..arch.stack_depth{
+                    for n in &target_neighbors{
+                        starts.push(Location::new(n.get_index()*arch.stack_depth + k));
+                    }
+                    for n in &msf_neighors{
+                        ends.push(Location::new(n.get_index()*arch.stack_depth + k));
+                    }
+                }
             }
-            _ => (vec![], vec![]),
+            _ => {},
         };
         Box::new(
             all_paths(arch, starts, ends, blocked)

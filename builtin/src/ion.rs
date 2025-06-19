@@ -1,6 +1,7 @@
 use std::collections::{HashMap, HashSet};
 
-use petgraph::{graph::NodeIndex, Graph};
+use itertools::Itertools;
+use petgraph::{graph::NodeIndex,  Graph};
 use serde::Serialize;
 use solver::{
     backend::solve,
@@ -15,7 +16,6 @@ use solver::{
 pub struct IonArch {
     trap_size: usize,
     width: usize,
-    height: usize,
 }
 
 impl Architecture for IonArch {
@@ -41,7 +41,7 @@ impl IonArch {
     }
 
     fn get_trap(&self, loc: Location) -> usize {
-        return loc.get_index() / self.width / self.height;
+        return loc.get_index() / self.trap_size
     }
 
     fn get_graph(&self) -> (Graph<Location, ()>, HashMap<Location, NodeIndex>) {
@@ -66,7 +66,7 @@ impl IonArch {
             v
         }
         for i in 0..self.width {
-            for j in 0..self.height {
+            for j in 0..2 {
                 for k in 0..self.trap_size {
                     // add trap locations
                     let (x_pos, y_pos) = (2 * i, 6 * j + k);
@@ -84,8 +84,15 @@ impl IonArch {
                         g.add_edge(v, above, ());
                     }
                 }
-                //add routing nodes
-                if j < self.height - 1 {
+                //add routing nodes, only do this at j=0 because it's shared between rows.
+                //                    2*i i+1  
+                // -----------------------------
+                // j+trap_size   |    v1 \
+                //               |    |  v3 
+                // j+trap_size+2 |    v2 /
+                // -------------------------------
+                // i  2*i+1 
+                if j == 0 {
                     let (x_pos, y_pos) = (2 * i, 6 * j + self.trap_size);
                     let v1 = add_location(
                         &mut g,
@@ -134,13 +141,61 @@ impl IonArch {
 }
 
 #[derive(Debug)]
-struct IonTransition {
-    edge: (Location, Location),
+pub struct IonTransition {
+    edges: Vec<(Location, Location)>,
+}
+
+#[derive(Debug)]
+pub struct IonTransitionIterator{
+    edges: Vec<(Location, Location)>,
+    mask: usize,
+    max: usize,
+}
+
+impl IonTransitionIterator{
+    pub fn new(edges : Vec<(Location, Location)>) -> Self{
+        let max = 1 << edges.len(); // 2^n combinations
+        Self { edges, mask: 0, max } 
+    }
+}
+
+impl Iterator for IonTransitionIterator{
+    type Item = IonTransition;
+    fn next(&mut self) -> Option<Self::Item> {
+        while self.mask < self.max {
+            let mut seen = HashSet::new();
+            let mut subset = Vec::new();
+            let mut valid = true;
+
+            for i in 0..self.edges.len() {
+                if (self.mask >> i) & 1 == 1 {
+                    let (a, b) = self.edges[i];
+                    if seen.contains(&a) || seen.contains(&b) {
+                        valid = false;
+                        break;
+                    }
+                    seen.insert(a);
+                    seen.insert(b);
+                    subset.push((a, b));
+                }
+            }
+
+            self.mask += 1;
+
+            if valid {
+                return Some(IonTransition { edges: subset });
+            }
+        }
+
+        None
+    }
 }
 impl Transition<IonGateImplementation, IonArch> for IonTransition {
     fn apply(&self, step: &IonStep) -> IonStep {
         let mut new_step = step.clone();
-        new_step.map = swap_keys(&step.map, self.edge.0, self.edge.1);
+        for edge in &self.edges{
+        new_step.map = swap_keys(&step.map, edge.0, edge.1);
+        }
         new_step.implemented_gates = HashSet::new();
         return new_step;
     }
@@ -150,27 +205,34 @@ impl Transition<IonGateImplementation, IonArch> for IonTransition {
     }
 
     fn cost(&self, _arch: &IonArch) -> f64 {
-        if self.edge.0 == self.edge.1 {
+        if self.edges.len() == 0{
             0.0
-        } else {
+        }
+        else{
             1.0
         }
     }
 }
 
-fn ion_transitions(arch: &IonArch) -> Vec<IonTransition> {
-    let mut transitions = Vec::new();
-    transitions.push(IonTransition {
-        edge: (Location::new(0), Location::new(0)),
-    });
-    let graph = arch.graph().0;
-    for edge in graph.edge_indices() {
-        let (source, target) = graph.edge_endpoints(edge).unwrap();
-        let (loc1, loc2) = (graph[source], graph[target]);
-        let trans = IonTransition { edge: (loc1, loc2) };
-        transitions.push(trans);
+fn ion_transitions(arch: &IonArch, step: &IonStep) -> IonTransitionIterator{
+    let (graph, _)  = arch.graph();
+    let mut edges = vec![];
+    for edge in graph.edge_indices(){
+        let (u,v) = graph.edge_endpoints(edge).expect("edge should exist");
+        let (l1, l2) = (graph[u],graph[v]);
+        let exactly_one_mapped = step.map.values().filter(|&& x| x == l1 || x == l2).count() == 1;
+        let both_mapped = step.map.values().contains(&l1) &&  step.map.values().contains(&l2);
+        let both_trap_positions = arch.get_trap_positions().contains(&l1) && arch.get_trap_positions().contains(&l2);
+        if exactly_one_mapped || (both_mapped && both_trap_positions) {
+            edges.push((l1, l2));
+
+        }
+
+        
     }
-    return transitions;
+    return IonTransitionIterator::new(edges);
+
+
 }
 
 #[derive(Debug, PartialEq, Eq, Hash, Serialize, Clone)]
@@ -220,7 +282,7 @@ pub fn ion_solve(c: &Circuit, a: &IonArch) -> CompilerResult<IonGateImplementati
     return solve(
         c,
         a,
-        &|_s| ion_transitions(a),
+        &|s| ion_transitions(a, s),
         &ion_implement_gate,
         |_s, _a| 0.0,
         Some(mapping_heuristic),
