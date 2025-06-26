@@ -113,6 +113,11 @@ pub enum Expr {
         vec2: Box<Expr>,
     },
 
+    RangeExpr{
+        bot : Box<Expr>,
+        top : Box<Expr>
+    },
+
     TransitionConstructor(Vec<(String, Expr)>),
     ImplConstructorExpr(Vec<(String, Expr)>),
 

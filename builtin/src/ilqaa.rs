@@ -13,7 +13,7 @@ use solver::{
 
 const CODE_DISTANCE: usize = 11;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct ILQArch {
     pub stack_depth: usize,
     pub width: usize,
@@ -134,36 +134,28 @@ pub fn compact_layout(alg_qubit_count: usize, stack_depth: usize) -> ILQArch {
     let top_edge = (0..width).map(|i| Location::new(i));
     let mut top_edge = Vec::new();
     for j in 0..width {
-        for k in 0..stack_depth {
-            top_edge.push(Location::new(0 * width * stack_depth + j * stack_depth + k));
-        }
+            top_edge.push(Location::new(0 * width * stack_depth + j * stack_depth));
     }
     let right_edge = (1..height).map(|i| Location::new(i * width + width - 1));
     let mut right_edge = Vec::new();
     for i in 1..height {
-        for k in 0..stack_depth {
             right_edge.push(Location::new(
-                i * width * stack_depth + (width - 1) * stack_depth + k,
+                i * width * stack_depth + (width - 1) * stack_depth
             ));
-        }
     }
     let bottom_edge = (0..width - 1)
         .rev()
         .map(|i| Location::new(i + width * (height - 1)));
     let mut bottom_edge = Vec::new();
     for j in (0..width - 1).rev() {
-        for k in 0..stack_depth {
             bottom_edge.push(Location::new(
-                (height - 1) * width * stack_depth + j * stack_depth + k,
+                (height - 1) * width * stack_depth + j * stack_depth,
             ));
         }
-    }
     let mut left_edge = Vec::new();
     for i in (1..height - 1).rev() {
-        for k in 0..stack_depth {
-            left_edge.push(Location::new(i * width * stack_depth + k));
+            left_edge.push(Location::new(i * width * stack_depth));
         }
-    }
     perimeter.extend(top_edge);
     perimeter.extend(right_edge);
     perimeter.extend(bottom_edge);
@@ -207,36 +199,28 @@ pub fn square_sparse_layout(alg_qubit_count: usize, stack_depth: usize) -> ILQAr
     let top_edge = (0..width).map(|i| Location::new(i));
     let mut top_edge = Vec::new();
     for j in 0..width {
-        for k in 0..stack_depth {
-            top_edge.push(Location::new(0 * width * stack_depth + j * stack_depth + k));
-        }
+            top_edge.push(Location::new(0 * width * stack_depth + j * stack_depth));
     }
     let right_edge = (1..height).map(|i| Location::new(i * width + width - 1));
     let mut right_edge = Vec::new();
     for i in 1..height {
-        for k in 0..stack_depth {
             right_edge.push(Location::new(
-                i * width * stack_depth + (width - 1) * stack_depth + k,
+                i * width * stack_depth + (width - 1) * stack_depth,
             ));
-        }
     }
     let bottom_edge = (0..width - 1)
         .rev()
         .map(|i| Location::new(i + width * (height - 1)));
     let mut bottom_edge = Vec::new();
     for j in (0..width - 1).rev() {
-        for k in 0..stack_depth {
             bottom_edge.push(Location::new(
-                (height - 1) * width * stack_depth + j * stack_depth + k,
+                (height - 1) * width * stack_depth + j * stack_depth,
             ));
-        }
     }
     let mut left_edge = Vec::new();
     for i in (1..height - 1).rev() {
-        for k in 0..stack_depth {
-            left_edge.push(Location::new(i * width * stack_depth + k));
+            left_edge.push(Location::new(i * width * stack_depth));
         }
-    }
     perimeter.extend(top_edge);
     perimeter.extend(right_edge);
     perimeter.extend(bottom_edge);
@@ -395,6 +379,7 @@ pub fn ilq_solve_joint_optimize_parallel(
     c: &Circuit,
     a: &ILQArch,
 ) -> CompilerResult<ILQGateImplementation> {
+    println!("arch {:?}", a);
     return solve_joint_optimize_parallel(
         c,
         a,

@@ -90,14 +90,13 @@ fn gate_type_parser() -> impl Parser<char, Vec<ast::GateType>, Error = Simple<ch
     gate_type.separated_by(just(",").padded()).at_least(1)
 }
 
-fn bin_op_parser() -> impl Parser<char, ast::BinOp, Error = Simple<char>>{
-     just("==")
+fn bin_op_parser() -> impl Parser<char, ast::BinOp, Error = Simple<char>> {
+    just("==")
         .map(|_| ast::BinOp::Equals)
         .or(just("/").map(|_| ast::BinOp::Div))
         .or(just("*").map(|_| ast::BinOp::Mult))
         .or(just("-").map(|_| ast::BinOp::Minus))
         .or(just("+").map(|_| ast::BinOp::Plus))
-    
 }
 
 fn impl_block_parser() -> impl Parser<char, ast::ImplBlock, Error = Simple<char>> {
@@ -128,7 +127,11 @@ fn impl_block_parser() -> impl Parser<char, ast::ImplBlock, Error = Simple<char>
         .padded()
         .then_ignore(just("]"))
         .padded()
-        .map(|((routed_gates, data), realize)| ast::ImplBlock { routed_gates, data, realize })
+        .map(|((routed_gates, data), realize)| ast::ImplBlock {
+            routed_gates,
+            data,
+            realize,
+        })
 }
 
 fn trans_block_parser() -> impl Parser<char, ast::TransitionBlock, Error = Simple<char>> {
@@ -279,7 +282,7 @@ fn expr_parser() -> impl Parser<char, ast::Expr, Error = Simple<char>> {
         let fold = just("fold(")
             .padded()
             .ignore_then(expr_parser.clone().padded())
-            .then_ignore(just(",").padded()) 
+            .then_ignore(just(",").padded())
             .then_ignore(just("|x, acc| ->").padded())
             .then(expr_parser.clone())
             .then_ignore(just(",").padded())
@@ -450,8 +453,16 @@ fn expr_parser() -> impl Parser<char, ast::Expr, Error = Simple<char>> {
             .then(bin_op_parser().padded())
             .then(expr_parser.clone())
             .map(|((a, op), b)| ast::Expr::BinOp(op, Box::new(a), Box::new(b)));
+        let range = just("range(")
+            .ignore_then(expr_parser.clone())
+            .then_ignore(just(".."))
+            .then(expr_parser.clone())
+            .then_ignore(just(")"))
+            .map(|(bot, top)| ast::Expr::RangeExpr { bot : Box::new(bot), top : Box::new(top) });
+
         let expr = choice((
             bin_op,
+            range,
             ite,
             option_match,
             map_access,

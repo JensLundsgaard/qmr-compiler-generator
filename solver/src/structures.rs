@@ -309,6 +309,9 @@ impl<G: GateImplementation> Step<G> {
         arch: &A,
         implement_gate: impl Fn(&Step<G>, &A, &Gate) -> I,
         crit_table: &HashMap<usize, usize>,
+        routing_search_initial_temp: f64,
+        routing_search_term_temp: f64,
+        routing_search_cool_rate: f64,
     ) {
         assert!(self.implemented_gates.is_empty());
         let mut best_total_criticality = 0;
@@ -347,9 +350,9 @@ impl<G: GateImplementation> Step<G> {
             let random_neighbor = swap_random_array_elements;
             let best_order = simulated_anneal(
                 executable.clone(),
-                CONFIG.routing_search_initial_temp,
-                CONFIG.routing_search_term_temp,
-                CONFIG.routing_search_cool_rate,
+                routing_search_initial_temp,
+                routing_search_term_temp,
+                routing_search_cool_rate,
                 random_neighbor,
                 cost_function,
             );

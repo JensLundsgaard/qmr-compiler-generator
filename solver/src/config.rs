@@ -1,8 +1,8 @@
-use std::fs;
+use std::{default, fs};
 
 use once_cell::sync::Lazy;
 
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 #[derive(Serialize, Deserialize, Debug)]
 pub struct SolverConfig {
     #[serde(default = "default_alpha")]
@@ -16,7 +16,7 @@ pub struct SolverConfig {
 
     #[serde(default = "default_delta")]
     pub delta: f64,
-    
+
     #[serde(default = "default_extended_set_weight")]
     pub extended_set_weight: f64,
 
@@ -48,7 +48,10 @@ pub struct SolverConfig {
     pub isom_search_timeout: u64,
 
     #[serde(default = "default_parallel_searches")]
-    pub parallel_searches : usize,
+    pub parallel_searches: usize,
+
+    #[serde(default = "default_limited_search_cool_rates")]
+    pub limited_search_cool_rates: [f64; 4],
 }
 
 impl Default for SolverConfig {
@@ -58,7 +61,7 @@ impl Default for SolverConfig {
             beta: default_beta(),
             gamma: default_gamma(),
             delta: default_delta(),
-            extended_set_weight : default_extended_set_weight(),
+            extended_set_weight: default_extended_set_weight(),
             mapping_search_initial_temp: default_mapping_search_initial_temp(),
             mapping_search_term_temp: default_mapping_search_term_temp(),
             mapping_search_cool_rate: default_mapping_search_cool_rate(),
@@ -68,7 +71,8 @@ impl Default for SolverConfig {
             routing_search_cool_rate: default_routing_search_cool_rate(),
             sabre_iterations: default_sabre_iterations(),
             isom_search_timeout: default_isom_search_timeout(),
-            parallel_searches : default_parallel_searches()
+            parallel_searches: default_parallel_searches(),
+            limited_search_cool_rates: default_limited_search_cool_rates(),
         };
     }
 }
@@ -88,7 +92,7 @@ fn default_delta() -> f64 {
     return 1.0;
 }
 
-fn default_extended_set_weight() -> f64{
+fn default_extended_set_weight() -> f64 {
     return 0.5;
 }
 
@@ -128,10 +132,13 @@ fn default_isom_search_timeout() -> u64 {
     return 300;
 }
 
-fn default_parallel_searches() -> usize{
+fn default_parallel_searches() -> usize {
     return 16;
 }
 
+fn default_limited_search_cool_rates() -> [f64; 4] {
+    return [0.0, 0.349, 0.99, 0.9];
+}
 pub static CONFIG: Lazy<SolverConfig> = Lazy::new(|| {
     let data = fs::read_to_string("config.json").unwrap_or_else(|_| "".to_string());
     serde_json::from_str(&data).unwrap_or_else(|_| SolverConfig::default())

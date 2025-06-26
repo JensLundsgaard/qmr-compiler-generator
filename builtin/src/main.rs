@@ -1,5 +1,7 @@
-use builtin::{ilqaa, mqlss, nisq, raa, scmr};
+use builtin::{ilqaa, ion, mqlss, nisq, raa, scmr};
+use petgraph::dot::{Config, Dot};
 use solver::utils;
+use solver::structures::Architecture;
 
 fn nisq_test() {
     let circ = utils::extract_cnots("/home/abtin/qmrsl/circuits/3_17_13.qasm");
@@ -38,13 +40,28 @@ fn mqlss_test() {
     let circ = utils::extract_gates("/home/abtin/qmrsl/pbc-circuits/3_17_13.pbc", &["Pauli"]);
     println!("{:?}", circ);
     let arch = mqlss::square_sparse_layout(circ.qubits.len());
-    println!("{:?}", mqlss::mqlss_solve_joint_optimize_parallel(&circ, &arch).cost);
+    println!(
+        "{:?}",
+        mqlss::mqlss_solve_joint_optimize_parallel(&circ, &arch).cost
+    );
+}
+
+fn ion_test() {
+    let circ = utils::extract_gates("/home/abtin/qmrsl/circuits/3_17_13.qasm", &["CX"]);
+    let arch = ion::IonArch {
+        width: 1,
+        trap_size: 4,
+    };
+    let graph = arch.graph().0;
+    println!("{:?}", Dot::with_config(&graph, &[Config::EdgeNoLabel]));
+    println!("{:?}", ion::ion_solve(&circ, &arch).cost);
 }
 
 fn main() {
     // nisq_test();
     // scmr_test();
-   // raa_test();
-    mqlss_test();
+    // raa_test();
+    //mqlss_test();
     // ilq_test();
+    ion_test();
 }

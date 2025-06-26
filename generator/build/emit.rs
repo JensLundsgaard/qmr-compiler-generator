@@ -60,73 +60,74 @@ fn contains_subexpr(e: &Expr, subexpr: &Expr) -> bool {
     }
     match e {
         Expr::SwapPair(left, right) => {
-            contains_subexpr(left, subexpr) || contains_subexpr(right, subexpr)
-        }
+                        contains_subexpr(left, subexpr) || contains_subexpr(right, subexpr)
+            }
         Expr::GetData { d: _, access: _ } => false,
         Expr::FloatLiteral(_) => false,
         Expr::ITE { cond, then, els } => {
-            contains_subexpr(cond, subexpr)
-                || contains_subexpr(then, subexpr)
-                || contains_subexpr(els, subexpr)
-        }
+                contains_subexpr(cond, subexpr)
+                    || contains_subexpr(then, subexpr)
+                    || contains_subexpr(els, subexpr)
+            }
         Expr::CallMethod {
-            d: _,
-            method: _,
-            args,
-        } => args.iter().any(|arg| contains_subexpr(arg, subexpr)),
+                d: _,
+                method: _,
+                args,
+            } => args.iter().any(|arg| contains_subexpr(arg, subexpr)),
         Expr::Append { vec, elem } => {
-            contains_subexpr(vec, subexpr) || contains_subexpr(elem, subexpr)
-        }
+                contains_subexpr(vec, subexpr) || contains_subexpr(elem, subexpr)
+            }
         Expr::LocationLiteral(_) => false,
         Expr::TransitionConstructor(vec) => {
-            vec.iter().any(|(_, expr)| contains_subexpr(expr, subexpr))
-        }
+                vec.iter().any(|(_, expr)| contains_subexpr(expr, subexpr))
+            }
         Expr::Tuple(vec) => vec.iter().any(|expr| contains_subexpr(expr, subexpr)),
         Expr::MapAccess(expr) => contains_subexpr(expr, subexpr),
         Expr::NoneExpr => false,
         Expr::SomeExpr(expr) => contains_subexpr(expr, subexpr),
         Expr::MapIterExpr {
-            container: c,
-            bound_var: _,
-            func: f,
-        } => contains_subexpr(c, subexpr) || contains_subexpr(f, subexpr),
+                container: c,
+                bound_var: _,
+                func: f,
+            } => contains_subexpr(c, subexpr) || contains_subexpr(f, subexpr),
         Expr::ImplConstructorExpr(vec) => {
-            vec.iter().any(|(_, expr)| contains_subexpr(expr, subexpr))
-        }
+                vec.iter().any(|(_, expr)| contains_subexpr(expr, subexpr))
+            }
         Expr::Ident(_) => false,
         Expr::BinOp(op, expr, expr1) => {
-            contains_subexpr(expr, subexpr) || contains_subexpr(expr1, subexpr)
-        }
+                contains_subexpr(expr, subexpr) || contains_subexpr(expr1, subexpr)
+            }
         Expr::IndexLiteral(_) => false,
         Expr::EmptyVec => false,
         Expr::FoldExpr {
-            container,
-            init,
-            func,
-        } => {
-            contains_subexpr(container, subexpr)
-                || contains_subexpr(init, subexpr)
-                || contains_subexpr(func, subexpr)
-        }
+                container,
+                init,
+                func,
+            } => {
+                contains_subexpr(container, subexpr)
+                    || contains_subexpr(init, subexpr)
+                    || contains_subexpr(func, subexpr)
+            }
         Expr::Extend { vec1, vec2 } => {
-            contains_subexpr(vec1, subexpr) || contains_subexpr(vec2, subexpr)
-        }
+                contains_subexpr(vec1, subexpr) || contains_subexpr(vec2, subexpr)
+            }
         Expr::CallFunction { func: _, args } => {
-            args.iter().any(|arg| contains_subexpr(arg, subexpr))
-        }
+                args.iter().any(|arg| contains_subexpr(arg, subexpr))
+            }
         Expr::OptionMatch {
-            expr,
-            some_arm,
-            none_arm,
-        } => {
-            contains_subexpr(expr, subexpr)
-                || contains_subexpr(some_arm, subexpr)
-                || contains_subexpr(none_arm, subexpr)
-        }
+                expr,
+                some_arm,
+                none_arm,
+            } => {
+                contains_subexpr(expr, subexpr)
+                    || contains_subexpr(some_arm, subexpr)
+                    || contains_subexpr(none_arm, subexpr)
+            }
         Expr::GetAnonData {
-            ident: _,
-            access: _,
-        } => false,
+                ident: _,
+                access: _,
+            } => false,
+Expr::RangeExpr { bot, top } => contains_subexpr(bot, subexpr) || contains_subexpr(top, subexpr),
     }
 }
 
@@ -524,377 +525,395 @@ fn emit_expr(
 ) -> TokenStream {
     match e {
         Expr::SwapPair(left, right) => {
-            let emit_left = emit_expr(left, context, trans_struct_name, imp_struct_name, bound_var);
-            let emit_right = emit_expr(
-                right,
-                context,
-                trans_struct_name,
-                imp_struct_name,
-                bound_var,
-            );
-            quote! {
-                let mut new_step = step.clone();
-                let left = #emit_left;
-                let right = #emit_right;
-                new_step.map = swap_keys(&step.map, left, right);
-                new_step.implemented_gates = HashSet::new();
-                return new_step;
+                        let emit_left = emit_expr(left, context, trans_struct_name, imp_struct_name, bound_var);
+                        let emit_right = emit_expr(
+                            right,
+                            context,
+                            trans_struct_name,
+                            imp_struct_name,
+                            bound_var,
+                        );
+                        quote! {
+                            let mut new_step = step.clone();
+                            let left = #emit_left;
+                            let right = #emit_right;
+                            new_step.map = swap_keys(&step.map, left, right);
+                            new_step.implemented_gates = HashSet::new();
+                            return new_step;
+                        }
             }
-        }
         Expr::GetData { d, access } => {
-            let field_name = emit_access_expr(
-                access,
-                context,
-                trans_struct_name,
-                imp_struct_name,
-                bound_var,
-            );
-            let name = match (context, d) {
-                (Context::DataTypeContext(dc), d) if dc == d => "self",
-                (_, DataType::Arch) => "arch",
-                (_, DataType::Transition) => "t",
-                (_, DataType::Step) => "step",
-                (_, DataType::Impl) => "gi",
-                (_, DataType::Gate) => "gate",
-            };
-            let data_name = syn::Ident::new(name, Span::call_site());
-            quote! {
-                #data_name.#field_name
+                let field_name = emit_access_expr(
+                    access,
+                    context,
+                    trans_struct_name,
+                    imp_struct_name,
+                    bound_var,
+                );
+                let name = match (context, d) {
+                    (Context::DataTypeContext(dc), d) if dc == d => "self",
+                    (_, DataType::Arch) => "arch",
+                    (_, DataType::Transition) => "t",
+                    (_, DataType::Step) => "step",
+                    (_, DataType::Impl) => "gi",
+                    (_, DataType::Gate) => "gate",
+                };
+                let data_name = syn::Ident::new(name, Span::call_site());
+                quote! {
+                    #data_name.#field_name
+                }
             }
-        }
         Expr::FloatLiteral(n) => quote! {#n},
         Expr::ITE { cond, then, els } => {
-            let emit_cond = emit_expr(
-                cond,
-                context,
-                &imp_struct_name,
-                &trans_struct_name,
-                bound_var,
-            );
-            match (&**then, &**els) {
-                (
-                    Expr::MapIterExpr {
-                        container: container_then,
-                        bound_var: bv_then,
-                        func: func_then,
-                    },
-                    Expr::MapIterExpr {
-                        container: container_els,
-                        bound_var: bv_els,
-                        func: func_els,
-                    },
-                ) if func_then == func_els && bv_then == bv_els => {
-                    let emit_container_then = emit_expr(
-                        container_then,
-                        context,
-                        &imp_struct_name,
-                        &trans_struct_name,
-                        bound_var,
-                    );
-                    let emit_container_else = emit_expr(
-                        container_els,
-                        context,
-                        &imp_struct_name,
-                        &trans_struct_name,
-                        bound_var,
-                    );
-                    let emit_func = emit_expr(
-                        &func_els,
-                        context,
-                        &trans_struct_name,
-                        &imp_struct_name,
-                        Some(bv_els),
-                    );
-                    quote! {
-                        let container = if #emit_cond {#emit_container_then} else{#emit_container_else};
-                        container.into_iter().map(|x| #emit_func)
+                let emit_cond = emit_expr(
+                    cond,
+                    context,
+                    &imp_struct_name,
+                    &trans_struct_name,
+                    bound_var,
+                );
+                match (&**then, &**els) {
+                    (
+                        Expr::MapIterExpr {
+                            container: container_then,
+                            bound_var: bv_then,
+                            func: func_then,
+                        },
+                        Expr::MapIterExpr {
+                            container: container_els,
+                            bound_var: bv_els,
+                            func: func_els,
+                        },
+                    ) if func_then == func_els && bv_then == bv_els => {
+                        let emit_container_then = emit_expr(
+                            container_then,
+                            context,
+                            &imp_struct_name,
+                            &trans_struct_name,
+                            bound_var,
+                        );
+                        let emit_container_else = emit_expr(
+                            container_els,
+                            context,
+                            &imp_struct_name,
+                            &trans_struct_name,
+                            bound_var,
+                        );
+                        let emit_func = emit_expr(
+                            &func_els,
+                            context,
+                            &trans_struct_name,
+                            &imp_struct_name,
+                            Some(bv_els),
+                        );
+                        quote! {
+                            let container = if #emit_cond {#emit_container_then} else{#emit_container_else};
+                            container.into_iter().map(|x| #emit_func)
 
+                        }
                     }
-                }
-                _ => {
-                    let emit_then = emit_expr(
-                        then,
-                        context,
-                        &imp_struct_name,
-                        &trans_struct_name,
-                        bound_var,
-                    );
-                    let emit_else = emit_expr(
-                        els,
-                        context,
-                        &imp_struct_name,
-                        &trans_struct_name,
-                        bound_var,
-                    );
-                    quote! {
-                        if #emit_cond {
-                            #emit_then
-                        } else {
-                            #emit_else
+                    _ => {
+                        let emit_then = emit_expr(
+                            then,
+                            context,
+                            &imp_struct_name,
+                            &trans_struct_name,
+                            bound_var,
+                        );
+                        let emit_else = emit_expr(
+                            els,
+                            context,
+                            &imp_struct_name,
+                            &trans_struct_name,
+                            bound_var,
+                        );
+                        quote! {
+                            if #emit_cond {
+                                #emit_then
+                            } else {
+                                #emit_else
+                            }
                         }
                     }
                 }
             }
-        }
-
         Expr::CallMethod { d, method, args } => {
-            let method_identifier = syn::Ident::new(method, Span::call_site());
-            let args = args.iter().map(|arg| {
-                emit_expr(
-                    arg,
-                    context,
-                    &trans_struct_name,
-                    &imp_struct_name,
-                    bound_var,
-                )
-            });
-            let name = match (context, d) {
-                (Context::DataTypeContext(dc), d) if dc == d => "self",
-                (_, DataType::Arch) => "arch",
-                (_, DataType::Transition) => "t",
-                (_, DataType::Step) => "step",
-                (_, DataType::Impl) => "gi",
-                (_, DataType::Gate) => "gate",
-            };
-            let data_name = syn::Ident::new(name, Span::call_site());
+                let method_identifier = syn::Ident::new(method, Span::call_site());
+                let args = args.iter().map(|arg| {
+                    emit_expr(
+                        arg,
+                        context,
+                        &trans_struct_name,
+                        &imp_struct_name,
+                        bound_var,
+                    )
+                });
+                let name = match (context, d) {
+                    (Context::DataTypeContext(dc), d) if dc == d => "self",
+                    (_, DataType::Arch) => "arch",
+                    (_, DataType::Transition) => "t",
+                    (_, DataType::Step) => "step",
+                    (_, DataType::Impl) => "gi",
+                    (_, DataType::Gate) => "gate",
+                };
+                let data_name = syn::Ident::new(name, Span::call_site());
 
-            quote! {
-                #data_name.#method_identifier(#(#args),*)
-            }
-        }
-        Expr::Append { vec, elem } => {
-            let emit_vec = emit_expr(vec, context, trans_struct_name, imp_struct_name, bound_var);
-            let emit_elem = emit_expr(elem, context, trans_struct_name, imp_struct_name, bound_var);
-            quote! {
-                push_and_return(#emit_vec, #emit_elem)
-            }
-        }
-        Expr::LocationLiteral(n) => {
-            let unsuffixed = syn::Index::from(*n);
-            quote! {Location::new(#unsuffixed)}
-        }
-        Expr::TransitionConstructor(vec) => {
-            let fields = vec.iter().map(|(name, expr)| {
-                let field_name = syn::Ident::new(name, Span::call_site());
-                let emit_expr =
-                    emit_expr(expr, context, trans_struct_name, imp_struct_name, bound_var);
-                quote! {#field_name : #emit_expr}
-            });
-            quote! {
-                #trans_struct_name {
-                    #(#fields),*
+                quote! {
+                    #data_name.#method_identifier(#(#args),*)
                 }
             }
-        }
+        Expr::Append { vec, elem } => {
+                let emit_vec = emit_expr(vec, context, trans_struct_name, imp_struct_name, bound_var);
+                let emit_elem = emit_expr(elem, context, trans_struct_name, imp_struct_name, bound_var);
+                quote! {
+                    push_and_return(#emit_vec, #emit_elem)
+                }
+            }
+        Expr::LocationLiteral(n) => {
+                let unsuffixed = syn::Index::from(*n);
+                quote! {Location::new(#unsuffixed)}
+            }
+        Expr::TransitionConstructor(vec) => {
+                let fields = vec.iter().map(|(name, expr)| {
+                    let field_name = syn::Ident::new(name, Span::call_site());
+                    let emit_expr =
+                        emit_expr(expr, context, trans_struct_name, imp_struct_name, bound_var);
+                    quote! {#field_name : #emit_expr}
+                });
+                quote! {
+                    #trans_struct_name {
+                        #(#fields),*
+                    }
+                }
+            }
         Expr::Tuple(vec) => {
-            let fields = vec.iter().map(|expr| {
-                emit_expr(
+                let fields = vec.iter().map(|expr| {
+                    emit_expr(
+                        expr,
+                        context,
+                        &trans_struct_name,
+                        &imp_struct_name,
+                        bound_var,
+                    )
+                });
+                quote! {
+                    (#(#fields),*)
+                }
+            }
+        Expr::MapAccess(expr) => {
+                let emit_inner = emit_expr(
                     expr,
                     context,
                     &trans_struct_name,
                     &imp_struct_name,
                     bound_var,
-                )
-            });
-            quote! {
-                (#(#fields),*)
-            }
-        }
-        Expr::MapAccess(expr) => {
-            let emit_inner = emit_expr(
-                expr,
-                context,
-                &trans_struct_name,
-                &imp_struct_name,
-                bound_var,
-            );
-            quote! {
-                step.map[&#emit_inner]
-            }
-        }
-        Expr::NoneExpr => quote! {None},
-        Expr::SomeExpr(expr) => {
-            let emit_inner = emit_expr(
-                expr,
-                context,
-                &trans_struct_name,
-                &imp_struct_name,
-                bound_var,
-            );
-            quote! {Some(#emit_inner)}
-        }
-
-        Expr::MapIterExpr {
-            container: c,
-            bound_var: bv,
-            func: f,
-        } => {
-            let emit_container =
-                emit_expr(c, context, &trans_struct_name, &imp_struct_name, bound_var);
-            let emit_func = emit_expr(f, context, &trans_struct_name, &imp_struct_name, Some(bv));
-            quote! {
-                #emit_container.into_iter().map(|x| #emit_func)
-            }
-        }
-        Expr::ImplConstructorExpr(vec) => {
-            let fields = vec.iter().map(|(name, expr)| {
-                let field_name = syn::Ident::new(name, Span::call_site());
-                let emit_expr =
-                    emit_expr(expr, context, trans_struct_name, imp_struct_name, bound_var);
-                quote! {#field_name : #emit_expr}
-            });
-            quote! {
-                #imp_struct_name {
-                    #(#fields),*
+                );
+                quote! {
+                    step.map[&#emit_inner]
                 }
             }
-        }
-        Expr::Ident(s) => {
-            let var_name = syn::Ident::new(s, Span::call_site());
-            match bound_var {
-                Some(bv) if bv == s => quote! {#var_name},
-                _ => quote! {#var_name},
-            }
-        }
-        Expr::BinOp(op, expr, expr1) => {
-            let left = emit_expr(
-                expr,
-                context,
-                &trans_struct_name,
-                &imp_struct_name,
-                bound_var,
-            );
-            let right = emit_expr(
-                expr1,
-                context,
-                &trans_struct_name,
-                &imp_struct_name,
-                bound_var,
-            );
-            match op{
-                BinOp::Equals => quote! {#left == #right},
-                BinOp::Div => quote! {#left / #right},
-                BinOp::Mult => quote! {#left * #right},
-                BinOp::Plus => quote! {#left + #right},
-                BinOp::Minus => quote! {#left - #right},
-            }
-        }
-        Expr::IndexLiteral(i) => {
-            let unsuffixed = syn::Index::from(*i);
-            quote! {#unsuffixed}
-        }
-        Expr::EmptyVec => quote! { Vec::new() },
-
-        Expr::FoldExpr {
-            container,
-            init,
-            func,
-        } => {
-            let emit_container = emit_expr(
-                container,
-                context,
-                &trans_struct_name,
-                &imp_struct_name,
-                bound_var,
-            );
-            let emit_func = emit_expr(
-                func,
-                context,
-                &trans_struct_name,
-                &imp_struct_name,
-                bound_var,
-            );
-            let emit_init = emit_expr(
-                init,
-                context,
-                &trans_struct_name,
-                &imp_struct_name,
-                bound_var,
-            );
-            quote! {
-                #emit_container.into_iter().fold(#emit_init, |acc, x| #emit_func)
-            }
-        }
-        Expr::Extend { vec1, vec2 } => {
-            let emit_vec1 = emit_expr(
-                vec1,
-                context,
-                &trans_struct_name,
-                &imp_struct_name,
-                bound_var,
-            );
-            let emit_vec2 = emit_expr(
-                vec2,
-                context,
-                &trans_struct_name,
-                &imp_struct_name,
-                bound_var,
-            );
-            quote! {
-                extend_and_return(#emit_vec1, #emit_vec2)
-            }
-        }
-        Expr::CallFunction { func, args } => {
-            let func_identifer = syn::Ident::new(func, Span::call_site());
-            let args = args.into_iter().map(|arg| {
-                emit_expr(
-                    arg,
+        Expr::NoneExpr => quote! {None},
+        Expr::SomeExpr(expr) => {
+                let emit_inner = emit_expr(
+                    expr,
                     context,
                     &trans_struct_name,
                     &imp_struct_name,
                     bound_var,
-                )
-            });
-            quote! {
-                #func_identifer(#(#args),*)
+                );
+                quote! {Some(#emit_inner)}
             }
-        }
-        Expr::OptionMatch {
-            expr,
-            some_arm,
-            none_arm,
-        } => {
-            let expr = emit_expr(
-                expr,
-                context,
-                &trans_struct_name,
-                &imp_struct_name,
-                bound_var,
-            );
-            let emit_some_arm = emit_expr(
-                some_arm,
-                context,
-                &trans_struct_name,
-                &imp_struct_name,
-                bound_var,
-            );
-            let emit_none_arm = emit_expr(
-                none_arm,
-                context,
-                &trans_struct_name,
-                &imp_struct_name,
-                bound_var,
-            );
-            quote! {
-                match #expr {
-                    Some(x) => #emit_some_arm,
-                    None => #emit_none_arm
+        Expr::MapIterExpr {
+                container: c,
+                bound_var: bv,
+                func: f,
+            } => {
+                let emit_container =
+                    emit_expr(c, context, &trans_struct_name, &imp_struct_name, bound_var);
+                let var  = syn::Ident::new(bv, Span::call_site());
+                let emit_func = emit_expr(f, context, &trans_struct_name, &imp_struct_name, Some(bv));
+                quote! {
+                    #emit_container.into_iter().map(|#var| #emit_func)
                 }
             }
-        }
-        Expr::GetAnonData { ident, access } => {
-            let field_name = emit_access_expr(
-                access,
-                context,
-                trans_struct_name,
-                imp_struct_name,
-                bound_var,
-            );
-            let name = syn::Ident::new(ident, Span::call_site());
-            quote! {
-                #name.#field_name
+        Expr::ImplConstructorExpr(vec) => {
+                let fields = vec.iter().map(|(name, expr)| {
+                    let field_name = syn::Ident::new(name, Span::call_site());
+                    let emit_expr =
+                        emit_expr(expr, context, trans_struct_name, imp_struct_name, bound_var);
+                    quote! {#field_name : #emit_expr}
+                });
+                quote! {
+                    #imp_struct_name {
+                        #(#fields),*
+                    }
+                }
             }
-        }
+        Expr::Ident(s) => {
+                let var_name = syn::Ident::new(s, Span::call_site());
+                match bound_var {
+                    Some(bv) if bv == s => quote! {#var_name},
+                    _ => quote! {#var_name},
+                }
+            }
+        Expr::BinOp(op, expr, expr1) => {
+                let left = emit_expr(
+                    expr,
+                    context,
+                    &trans_struct_name,
+                    &imp_struct_name,
+                    bound_var,
+                );
+                let right = emit_expr(
+                    expr1,
+                    context,
+                    &trans_struct_name,
+                    &imp_struct_name,
+                    bound_var,
+                );
+                match op{
+                    BinOp::Equals => quote! {#left == #right},
+                    BinOp::Div => quote! {#left / #right},
+                    BinOp::Mult => quote! {#left * #right},
+                    BinOp::Plus => quote! {#left + #right},
+                    BinOp::Minus => quote! {#left - #right},
+                }
+            }
+        Expr::IndexLiteral(i) => {
+                let unsuffixed = syn::Index::from(*i);
+                quote! {#unsuffixed}
+            }
+        Expr::EmptyVec => quote! { Vec::new() },
+        Expr::FoldExpr {
+                container,
+                init,
+                func,
+            } => {
+                let emit_container = emit_expr(
+                    container,
+                    context,
+                    &trans_struct_name,
+                    &imp_struct_name,
+                    bound_var,
+                );
+                let emit_func = emit_expr(
+                    func,
+                    context,
+                    &trans_struct_name,
+                    &imp_struct_name,
+                    bound_var,
+                );
+                let emit_init = emit_expr(
+                    init,
+                    context,
+                    &trans_struct_name,
+                    &imp_struct_name,
+                    bound_var,
+                );
+                quote! {
+                    #emit_container.into_iter().fold(#emit_init, |acc, x| #emit_func)
+                }
+            }
+        Expr::Extend { vec1, vec2 } => {
+                let emit_vec1 = emit_expr(
+                    vec1,
+                    context,
+                    &trans_struct_name,
+                    &imp_struct_name,
+                    bound_var,
+                );
+                let emit_vec2 = emit_expr(
+                    vec2,
+                    context,
+                    &trans_struct_name,
+                    &imp_struct_name,
+                    bound_var,
+                );
+                quote! {
+                    extend_and_return(#emit_vec1, #emit_vec2)
+                }
+            }
+        Expr::CallFunction { func, args } => {
+                let func_identifer = syn::Ident::new(func, Span::call_site());
+                let args = args.into_iter().map(|arg| {
+                    emit_expr(
+                        arg,
+                        context,
+                        &trans_struct_name,
+                        &imp_struct_name,
+                        bound_var,
+                    )
+                });
+                quote! {
+                    #func_identifer(#(#args),*)
+                }
+            }
+        Expr::OptionMatch {
+                expr,
+                some_arm,
+                none_arm,
+            } => {
+                let expr = emit_expr(
+                    expr,
+                    context,
+                    &trans_struct_name,
+                    &imp_struct_name,
+                    bound_var,
+                );
+                let emit_some_arm = emit_expr(
+                    some_arm,
+                    context,
+                    &trans_struct_name,
+                    &imp_struct_name,
+                    bound_var,
+                );
+                let emit_none_arm = emit_expr(
+                    none_arm,
+                    context,
+                    &trans_struct_name,
+                    &imp_struct_name,
+                    bound_var,
+                );
+                quote! {
+                    match #expr {
+                        Some(x) => #emit_some_arm,
+                        None => #emit_none_arm
+                    }
+                }
+            }
+        Expr::GetAnonData { ident, access } => {
+                let field_name = emit_access_expr(
+                    access,
+                    context,
+                    trans_struct_name,
+                    imp_struct_name,
+                    bound_var,
+                );
+                let name = syn::Ident::new(ident, Span::call_site());
+                quote! {
+                    #name.#field_name
+                }
+            }
+        Expr::RangeExpr { bot, top } => 
+        {
+            let left = emit_expr(
+                    bot,
+                    context,
+                    &trans_struct_name,
+                    &imp_struct_name,
+                    bound_var,
+                );
+                let right = emit_expr(
+                    top,
+                    context,
+                    &trans_struct_name,
+                    &imp_struct_name,
+                    bound_var,
+                );
+            quote! {
+                (#left..#right)
+            }
+        },
     }
 }
 

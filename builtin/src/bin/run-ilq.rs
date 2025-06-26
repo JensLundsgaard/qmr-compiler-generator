@@ -1,7 +1,8 @@
 use builtin::ilqaa::{ilq_solve, ilq_solve_joint_optimize_parallel};
+use petgraph::dot::{Config, Dot};
 use serde_json;
 use solver::utils::{self, IOError};
-
+use solver::structures::Architecture;
 fn run_ilq(
     circ_path: &str,
     arch_type: &str,

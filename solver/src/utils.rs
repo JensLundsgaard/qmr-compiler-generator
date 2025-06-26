@@ -158,7 +158,8 @@ pub fn extract_gates(filename: &str, gate_types: &[&str]) -> Circuit {
                     let numerator = c.get(2).unwrap().as_str().parse::<isize>().unwrap();
                     let denominator = c.get(3).unwrap().as_str().parse::<usize>().unwrap();
                     let axis: Vec<PauliTerm> = axis_str.chars().map(parse_pauli_term).collect();
-                    let nontrivial_indices = (0..axis.len()).filter(|ind| axis[*ind] != PauliTerm::PauliI);
+                    let nontrivial_indices =
+                        (0..axis.len()).filter(|ind| axis[*ind] != PauliTerm::PauliI);
                     let gate_qubits: Vec<Qubit> = nontrivial_indices.map(Qubit::new).collect();
                     qubits.extend(gate_qubits.iter());
                     Gate {
@@ -180,7 +181,8 @@ pub fn extract_gates(filename: &str, gate_types: &[&str]) -> Circuit {
                     let sign = sign_str != "-";
                     let axis_str = c.get(2).unwrap().as_str();
                     let axis: Vec<PauliTerm> = axis_str.chars().map(parse_pauli_term).collect();
-                    let nontrivial_indices = (0..axis.len()).filter(|ind| axis[*ind] != PauliTerm::PauliI);
+                    let nontrivial_indices =
+                        (0..axis.len()).filter(|ind| axis[*ind] != PauliTerm::PauliI);
                     let gate_qubits: Vec<Qubit> = nontrivial_indices.map(Qubit::new).collect();
                     qubits.extend(gate_qubits.iter());
                     Gate {
@@ -442,7 +444,6 @@ pub fn all_paths<A: Architecture>(
         stack.push(start_neighbors.into_iter());
         visited.push(unblocked_starts[start_counter]);
     }
-
     from_fn(move || {
         let mut exhausted = start_counter >= unblocked_starts.len();
         while !exhausted {
@@ -451,8 +452,14 @@ pub fn all_paths<A: Architecture>(
                     let loc = graph[child];
                     if visited.len() < max_length {
                         if ends.contains(&loc) {
-                            let path = visited.iter().chain(Some(&loc)).cloned().collect();
-                            return Some(path);
+                            let path: Vec<Location> =
+                                visited.iter().chain(Some(&loc)).cloned().collect();
+                            let n = path.len();
+                            if path[n - 1] == path[0] {
+                                return vec![path[0]].into();
+                            } else {
+                                return Some(path);
+                            }
                         } else if !visited.contains(&loc) {
                             visited.push(loc);
                             let neighbors: Vec<_> =
@@ -491,38 +498,101 @@ pub fn all_paths<A: Architecture>(
     })
 }
 
+// pub fn steiner_trees<A: Architecture>(
+//     arch: &A,
+//     terminals: Vec<Vec<Location>>,
+//     blocked: Vec<Location>,
+// ) -> impl IntoIterator<Item = Vec<Location>> {
+//     let (mut graph, mut loc_to_node) = arch.graph();
+//     for loc in blocked.iter() {
+//         let old_last = graph[graph.node_indices().last().unwrap()];
+//         graph.remove_node(loc_to_node[loc]);
+//         loc_to_node.insert(old_last, loc_to_node[loc]);
+//         loc_to_node.remove(loc);
+//     }
+//     let terminal_sets = terminals
+//         .into_iter()
+//         .multi_cartesian_product()
+//         .filter(|v| v.iter().all(|l| loc_to_node.contains_key(l)));
+//     let mut impls = vec![];
+//     for terminal_set in terminal_sets {
+//         let indices: Vec<NodeIndex> = terminal_set.into_iter().map(|x| loc_to_node[&x]).collect();
+//         let steiner_tree_res = steiner_tree(&graph, &indices, |_| Ok::<f64, ()>(1.0));
+
+//         if let Ok(Some(tree)) = steiner_tree_res {
+//             let locations = tree
+//                 .used_node_indices
+//                 .into_iter()
+//                 .map(|n| &graph[NodeIndex::new(n)])
+//                 .cloned()
+//                 .collect();
+//             impls.push(locations);
+//         }
+//     }
+//     return impls;
+// }
+
+pub struct SteinerTreesIter {
+    graph: Graph<Location, ()>,
+    loc_to_node: HashMap<Location, NodeIndex>,
+    terminal_sets: Vec<Vec<Location>>,
+}
+
+impl Iterator for SteinerTreesIter {
+    type Item = Vec<Location>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        for terminal_set in &self.terminal_sets {
+            let indices: Vec<NodeIndex> = terminal_set
+                .into_iter()
+                .map(|x| self.loc_to_node[&x])
+                .collect();
+
+            let steiner_tree_res = steiner_tree(&self.graph, &indices, |_| Ok::<f64, ()>(1.0));
+
+            if let Ok(Some(tree)) = steiner_tree_res {
+                let locations = tree
+                    .used_node_indices
+                    .into_iter()
+                    .map(|n| &self.graph[NodeIndex::new(n)])
+                    .cloned()
+                    .collect();
+                return Some(locations);
+            }
+        }
+        None
+    }
+}
+
 pub fn steiner_trees<A: Architecture>(
     arch: &A,
     terminals: Vec<Vec<Location>>,
     blocked: Vec<Location>,
-) -> impl IntoIterator<Item = Vec<Location>> {
+) -> SteinerTreesIter {
     let (mut graph, mut loc_to_node) = arch.graph();
+
+    // Remove blocked locations
     for loc in blocked.iter() {
-        let old_last = graph[graph.node_indices().last().unwrap()];
-        graph.remove_node(loc_to_node[loc]);
-        loc_to_node.insert(old_last, loc_to_node[loc]);
-        loc_to_node.remove(loc);
+        if let Some(node_idx) = loc_to_node.get(loc) {
+            let old_last = graph[graph.node_indices().last().unwrap()];
+            graph.remove_node(*node_idx);
+            loc_to_node.insert(old_last, *node_idx);
+            loc_to_node.remove(loc);
+        }
     }
+
+    // Create lazy iterator for terminal combinations
     let terminal_sets = terminals
         .into_iter()
         .multi_cartesian_product()
-        .filter(|v| v.iter().all(|l| loc_to_node.contains_key(l)));
-    let mut impls = vec![];
-    for terminal_set in terminal_sets {
-        let indices: Vec<NodeIndex> = terminal_set.into_iter().map(|x| loc_to_node[&x]).collect();
-        let steiner_tree_res = steiner_tree(&graph, &indices, |_| Ok::<f64, ()>(1.0));
+        .filter(|v| v.iter().all(|l| loc_to_node.contains_key(l)))
+        .collect();
 
-        if let Ok(Some(tree)) = steiner_tree_res {
-            let locations = tree
-                .used_node_indices
-                .into_iter()
-                .map(|n| &graph[NodeIndex::new(n)])
-                .cloned()
-                .collect();
-            impls.push(locations);
-        }
+    SteinerTreesIter {
+        graph,
+        loc_to_node,
+        terminal_sets,
     }
-    return impls;
 }
 
 pub fn build_criticality_table(c: &Circuit) -> HashMap<usize, usize> {
@@ -603,7 +673,6 @@ pub fn circuit_to_layers(c: &mut Circuit) -> Vec<Vec<Gate>> {
         let l = c.get_front_layer();
         c.remove_gates(&l);
         layers.push(l);
-
     }
     return layers;
 }

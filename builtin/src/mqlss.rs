@@ -1,10 +1,15 @@
 use itertools::Itertools;
+use petgraph::Graph;
 use rustworkx_core::{
     petgraph::{self, graph::NodeIndex},
     steiner_tree::steiner_tree,
 };
 use serde::Serialize;
-use solver::{backend::{solve, solve_joint_optimize_parallel}, structures::*, utils::*};
+use solver::{
+    backend::{solve, solve_joint_optimize_parallel},
+    structures::*,
+    utils::*,
+};
 use std::collections::{HashMap, HashSet};
 #[derive(Clone)]
 pub struct MQLSSArchitecture {
@@ -181,21 +186,14 @@ fn mqlss_implement_gate(
     step: &MQLSSStep,
     arch: &MQLSSArchitecture,
     gate: &Gate,
-) -> Vec<MQLSSGateImplementation> {
-    let (mut graph, mut loc_to_node) = arch.get_graph();
-    let mut impls = vec![];
+) -> impl Iterator<Item = MQLSSGateImplementation> {
+    let mut blocked = Vec::new();
     for loc in &arch.magic_state_qubits {
         assert!(!arch.alg_qubits.clone().into_iter().any(|l| l == *loc));
-        let old_last = graph[graph.node_indices().last().unwrap()];
-        graph.remove_node(loc_to_node[loc]);
-        loc_to_node.insert(old_last, loc_to_node[loc]);
-        loc_to_node.remove(loc);
+        blocked.push(*loc);
     }
     for loc in step.map.values().into_iter() {
-        let old_last = graph[graph.node_indices().last().unwrap()];
-        graph.remove_node(loc_to_node[loc]);
-        loc_to_node.insert(old_last, loc_to_node[loc]);
-        loc_to_node.remove(loc);
+        blocked.push(*loc);
     }
     for loc in step
         .implemented_gates
@@ -203,10 +201,7 @@ fn mqlss_implement_gate(
         .map(|x| x.implementation.used_nodes.clone())
         .flatten()
     {
-        let old_last = graph[graph.node_indices().last().unwrap()];
-        graph.remove_node(loc_to_node[&loc]);
-        loc_to_node.insert(old_last, loc_to_node[&loc]);
-        loc_to_node.remove(&loc);
+        blocked.push(loc);
     }
     let mut qubit_terminals = vec![];
     match &gate.operation {
@@ -280,28 +275,9 @@ fn mqlss_implement_gate(
             )
         }
     }
-    let terminal_sets = qubit_terminals
+    steiner_trees(arch, qubit_terminals, blocked)
         .into_iter()
-        .multi_cartesian_product()
-        .filter(|v| v.iter().all(|l| loc_to_node.contains_key(l)));
-
-    for terminal_set in terminal_sets {
-        let indices: Vec<NodeIndex> = terminal_set.into_iter().map(|x| loc_to_node[&x]).collect();
-        let steiner_tree_res = steiner_tree(&graph, &indices, |_| Ok::<f64, ()>(1.0));
-
-        if let Ok(Some(tree)) = steiner_tree_res {
-            let locations = tree
-                .used_node_indices
-                .into_iter()
-                .map(|n| &graph[NodeIndex::new(n)])
-                .cloned()
-                .collect();
-            impls.push(MQLSSGateImplementation {
-                used_nodes: locations,
-            });
-        }
-    }
-    return impls;
+        .map(|x| MQLSSGateImplementation { used_nodes: x })
 }
 
 pub fn mqlss_solve(c: &Circuit, a: &MQLSSArchitecture) -> CompilerResult<MQLSSGateImplementation> {
@@ -316,7 +292,10 @@ pub fn mqlss_solve(c: &Circuit, a: &MQLSSArchitecture) -> CompilerResult<MQLSSGa
     );
 }
 
-pub fn mqlss_solve_joint_optimize_parallel(c: &Circuit, a: &MQLSSArchitecture) -> CompilerResult<MQLSSGateImplementation> {
+pub fn mqlss_solve_joint_optimize_parallel(
+    c: &Circuit,
+    a: &MQLSSArchitecture,
+) -> CompilerResult<MQLSSGateImplementation> {
     return solve_joint_optimize_parallel(
         c,
         a,

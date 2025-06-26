@@ -109,6 +109,7 @@ fn test_program() -> ProblemDefinition {
                 cond: Box::new(Expr::BinOp(
                     BinOp::Equals,
                     Box::new(Expr::GetData {
+
                         d: DataType::Transition,
                         access: AccessExpr::Access("edge".to_string(), Box::new(AccessChain::Nil)),
                     }),
