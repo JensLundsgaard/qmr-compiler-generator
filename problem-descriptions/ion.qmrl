@@ -1,8 +1,55 @@
+
+{{
+    fn get_pair_cost(pair: (Location, Location), arch: &IonArch) -> f64 {
+    let mut cost = 0.0;
+    // all pairs have these at the end points
+    cost += 80e-6 + 5e-6 + 5e-6 + 80e-6;
+    let (col_a, col_b) = (
+        pair.0.get_index() / (2 * arch.trap_size),
+        pair.0.get_index() / (2 * arch.trap_size),
+    );
+    // counting junctions
+    let junction_count = usize::abs_diff(col_a, col_b)+1;
+    if junction_count > 0 {
+        let mut y_count = 0;
+        if col_a == 0 || col_a == arch.width - 1 {
+            y_count += 1;
+        }
+        if col_b == 0 || col_b == arch.width - 1 {
+            y_count += 1;
+        }
+        let x_count = junction_count - y_count;
+        cost += y_count as f64 * (100e-6 + 5e-6);
+        cost += x_count as f64 * (120e-6 + 5e-6);
+    }
+    if !arch.get_outer_trap_positions().contains(&pair.0) {
+        cost += 42e-6;
+    }
+    if !arch.get_outer_trap_positions().contains(&pair.1) {
+        cost += 42e-6;
+    }
+    return cost;
+}
+}}
+
 GateRealization[
     routed_gates = CX
-    name = 'NisqCnot'
+    name = 'IonCNOT'
     data = (u : Location, v : Location)
-    realize_gate = if Arch.contains_edge((Step.map[Gate.qubits[0]],Step.map[Gate.qubits[1]]))
+    realize_gate = if Arch.trap_edges.contains((Step.map[Gate.qubits[0]],Step.map[Gate.qubits[1]]))
             then Some(GateRealization{u = Step.map[Gate.qubits[0]],v = Step.map[Gate.qubits[1]]})
             else None
+]
+
+Transition[
+    name = 'IonTransition'
+    data = (edges : Vec<Vec<Location>>)
+    get_transitions = combinations(Arch.trap_vertices(), 2)
+    cost = fold(0, |x, acc| -> max(x, acc), map(|x| -> get_pair_cost(x, Arch), Transition.edges))
+]
+
+Architecture[
+  name = 'IonArch'
+  data = (trap_positions : Vec<Location>, trap_edges : Vec<Vec<Location>>, width : Int, height : Int)
+  get_locations = Arch.trap_positions()
 ]

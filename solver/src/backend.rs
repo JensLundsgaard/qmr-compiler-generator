@@ -231,7 +231,6 @@ fn route<
             &crit_table,
             id,
         );
-        // println!("best: {:?}", best);
         match best {
             Some((s, trans, _b)) => {
                 current_circ.remove_gates(&s.gates());

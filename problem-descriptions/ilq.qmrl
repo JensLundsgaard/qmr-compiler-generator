@@ -13,8 +13,8 @@ GateRealization[
                                   fold(Vec(), 
                                     |x, acc| -> acc.extend(x),
                                        map(|k| -> 
-                                            map(|n| -> ((n)*stack_depth) + k, 
-                                                vertical_neighbors((Step.map[Gate.qubits[0]]) / arch.stack_depth, arch.width, arch.height)),
+                                            map(|n| -> ((n)*Arch.stack_size) + k, 
+                                                vertical_neighbors((Step.map[Gate.qubits[0]]) / Arch.arch.stack_size, arch.width, arch.height)),
                                             (0..Arch.stack_size))),
                                                             
                         horizontal_neighbors(Step.map[Gate.qubits[1]], arch.width), 

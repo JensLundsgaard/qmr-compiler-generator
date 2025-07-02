@@ -2,13 +2,13 @@ use builtin::ion::{ion_solve, ion_solve_joint_optimize_parallel, IonArch};
 use serde_json;
 use solver::utils::{self, IOError};
 
-fn run_ion(circ_path: &str, trap_size_arg: &str, solve_mode: &str) -> Result<(), IOError> {
+fn run_ion(circ_path: &str, width_arg: &str, solve_mode: &str) -> Result<(), IOError> {
     let circ = utils::extract_gates(circ_path, &["CX"]);
-    let trap_size = trap_size_arg.parse().expect("trap size should be usize");
-
+    let width = width_arg.parse().expect("width arg should be usize");
+    let trap_size = circ.qubits.len().div_ceil(2*width).max(2);
     let arch = IonArch {
         trap_size,
-        width: circ.qubits.len().div_ceil(trap_size),
+        width
     };
     let res = match solve_mode {
         "--onepass" => Ok(ion_solve(&circ, &arch)),

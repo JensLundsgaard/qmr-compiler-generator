@@ -50,11 +50,11 @@ fn ion_test() {
     let circ = utils::extract_gates("/home/abtin/qmrsl/circuits/3_17_13.qasm", &["CX"]);
     let arch = ion::IonArch {
         width: 1,
-        trap_size: 4,
+        trap_size: 2,
     };
     let graph = arch.graph().0;
     println!("{:?}", Dot::with_config(&graph, &[Config::EdgeNoLabel]));
-    println!("{:?}", ion::ion_solve(&circ, &arch).cost);
+    println!("{:?}", ion::ion_solve(&circ, &arch));
 }
 
 fn main() {

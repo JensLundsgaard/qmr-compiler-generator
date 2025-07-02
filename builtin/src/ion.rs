@@ -203,84 +203,6 @@ pub struct IonTransition {
     pairs: Vec<(Location, Location)>,
 }
 
-#[derive(Debug)]
-pub struct IonTransitionIterator {
-    pairs: Vec<(Location, Location)>,
-    mask: usize,
-    max: usize,
-    trap_size: usize,
-}
-
-impl IonTransitionIterator {
-    pub fn new(pairs: Vec<(Location, Location)>, trap_size: usize) -> Self {
-        let max = 1 << pairs.len(); // 2^n combinations
-        Self {
-            pairs,
-            mask: 0,
-            max,
-            trap_size,
-        }
-    }
-}
-
-fn consistent(seen_set: &HashSet<(usize, usize)>, new: (usize, usize)) -> bool {
-    for pair in seen_set {
-        let safe = pair.1 < new.0 || pair.0 < new.1;
-        if !safe {
-            return false;
-        }
-    }
-    return true;
-}
-
-impl Iterator for IonTransitionIterator {
-    type Item = IonTransition;
-    fn next(&mut self) -> Option<Self::Item> {
-        while self.mask < self.max {
-            let mut seen_pairs = HashSet::new();
-            let mut seen_locs = HashSet::new();
-            let mut subset = Vec::new();
-            let mut valid = true;
-
-            for i in 0..self.pairs.len() {
-                if (self.mask >> i) & 1 == 1 {
-                    let (a, b) = self.pairs[i];
-                    let (col_a, col_b) = (
-                        a.get_index() / (2 * self.trap_size),
-                        b.get_index() / (2 * self.trap_size),
-                    );
-                    let same_trap =
-                        a.get_index() / self.trap_size == b.get_index() / self.trap_size;
-                    let (min_col, max_col) = if col_a < col_b {
-                        (col_a, col_b)
-                    } else {
-                        (col_b, col_a)
-                    };
-                    let addable = (consistent(&seen_pairs, (min_col, max_col)) || same_trap)
-                        && !seen_locs.contains(&a)
-                        && !seen_locs.contains(&b);
-                    if !addable {
-                        valid = false;
-                        break;
-                    }
-                    seen_pairs.insert((min_col, max_col));
-                    seen_locs.insert(a);
-                    seen_locs.insert(b);
-                    subset.push((a, b));
-                }
-            }
-
-            self.mask += 1;
-
-            if valid {
-                return Some(IonTransition { pairs: subset });
-            }
-        }
-
-        None
-    }
-}
-
 fn get_pair_cost(pair: (Location, Location), arch: &IonArch) -> f64 {
     let mut cost = 0.0;
     // all pairs have these at the end points
@@ -290,7 +212,7 @@ fn get_pair_cost(pair: (Location, Location), arch: &IonArch) -> f64 {
         pair.0.get_index() / (2 * arch.trap_size),
     );
     // counting junctions
-    let junction_count = usize::abs_diff(col_a, col_b);
+    let junction_count = usize::abs_diff(col_a, col_b)+1;
     if junction_count > 0 {
         let mut y_count = 0;
         if col_a == 0 || col_a == arch.width - 1 {
@@ -301,7 +223,7 @@ fn get_pair_cost(pair: (Location, Location), arch: &IonArch) -> f64 {
         }
         let x_count = junction_count - y_count;
         cost += y_count as f64 * (Y_COST + SEGMENT_COST);
-        cost += x_count as f64 * (Y_COST + SEGMENT_COST);
+        cost += x_count as f64 * (X_COST + SEGMENT_COST);
     }
     if !arch.get_outer_trap_positions().contains(&pair.0) {
         cost += INNER_SWAP_COST;
@@ -323,7 +245,8 @@ impl Transition<IonGateImplementation, IonArch> for IonTransition {
     }
 
     fn repr(&self) -> String {
-        return format!("{:?}", self);
+        let arch = &IonArch { trap_size: 2, width: 3 };
+        return format!("{:?}, cost : {:?}", self, self.cost(arch));
     }
 
     fn cost(&self, arch: &IonArch) -> f64 {
@@ -339,21 +262,56 @@ impl Transition<IonGateImplementation, IonArch> for IonTransition {
     }
 }
 
-fn ion_transitions(arch: &IonArch, step: &IonStep) -> IonTransitionIterator {
-    let (graph, _) = arch.graph();
+fn ion_transitions(arch: &IonArch, step: &IonStep) -> Vec<IonTransition> {
     let mut edges = vec![];
-
-    let outers = arch.get_trap_positions();
-    let map_positions  : Vec<_>= step.map.values().collect();
-    for outer1 in &outers {
-        for outer2 in &outers {
-            if outer1 != outer2 && (map_positions.contains(&outer1) || map_positions.contains(&outer2)) {
-                edges.push((*outer1, *outer2));
+    let mut subsets = vec![];
+    let trap_positions = arch.get_trap_positions();
+    let map_positions: Vec<_> = step.map.values().collect();
+    for pos1 in &trap_positions {
+        for pos2 in &trap_positions {
+            if map_positions.contains(&pos1)
+                || map_positions.contains(&pos2) && *pos1 / arch.trap_size != *pos1 / arch.trap_size
+            {
+                edges.push((*pos1, *pos2));
             }
         }
     }
-    println!("edges: {:?}", edges);
-    return IonTransitionIterator::new(edges, arch.trap_size);
+    subsets.push(vec![]);
+    for p in &edges {
+        subsets.push(vec![*p]);
+    }
+    for p1 in &edges {
+        let (a1, b1) = p1;
+        let (col_a1, col_b1) = (
+            a1.get_index() / (2 * arch.trap_size),
+            b1.get_index() / (2 * arch.trap_size),
+        );
+        let (min_col1, max_col1) = if col_a1 < col_b1 {
+            (col_a1, col_b1)
+        } else {
+            (col_b1, col_a1)
+        };
+        for p2 in &edges {
+            let (a2, b2) = p2;
+            let (col_a2, col_b2) = (
+                a2.get_index() / (2 * arch.trap_size),
+                b2.get_index() / (2 * arch.trap_size),
+            );
+            let (min_col2, max_col2) = if col_a2 < col_b2 {
+                (col_a2, col_b2)
+            } else {
+                (col_b2, col_a2)
+            };
+            let consistent = max_col1 < min_col2 || max_col2 < min_col1;
+            if consistent {
+                subsets.push(vec![*p1, *p2]);
+            }
+        }
+    }
+    subsets
+        .into_iter()
+        .map(|x| IonTransition { pairs: x })
+        .collect()
 }
 
 #[derive(Debug, PartialEq, Eq, Hash, Serialize, Clone)]
