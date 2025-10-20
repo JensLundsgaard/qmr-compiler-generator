@@ -34,6 +34,10 @@ To run a `.qmrl` run
 ```
 where $FILE is the relative path to your MAROL file ending in `.qmrl`. 
 
-
 # Notes
 Depending on what version of python how and how it is installed, you may need to add an alias to your bash config file, which should be at either `~/.bashrc`, `~/.bash\_profile` or `~/.zshrc`
+
+# References 
+MAROL is based on the following paper:
+[1] Abtin Molavi, Amanda Xu, Ethan Cecchetti, Swamit Tannu, Aws Albarghouthi. "[Generating Compilers for Qubit Mapping and Routing](https://arxiv.org/pdf/2508.10781)" 
+
